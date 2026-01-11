@@ -1,0 +1,35 @@
+version: "3"
+
+vars:
+  ANDROID_DIR: android
+
+tasks:
+  lint:js:
+    desc: Run JS/TS lint
+    cmds:
+      - npm run lint
+
+  test:js:
+    desc: Run JS/TS unit tests
+    cmds:
+      - node --test --experimental-strip-types
+
+  lint:kt:
+    desc: Run Kotlin lint
+    dir: "{{.ANDROID_DIR}}"
+    cmds:
+      - ./gradlew ktlintCheck
+
+  test:kt:
+    desc: Run Kotlin unit tests
+    dir: "{{.ANDROID_DIR}}"
+    cmds:
+      - ./gradlew test
+
+  pipe:
+    desc: Run all lint and unit tests (fail fast)
+    cmds:
+      - task: lint:js
+      - task: test:js
+      - task: lint:kt
+      - task: test:kt
