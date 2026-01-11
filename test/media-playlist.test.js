@@ -33,3 +33,26 @@ test("parseMediaPlaylist parses segments, keys, maps", () => {
   assert.equal(playlist.segments[1].byteRange?.length, 800);
   assert.equal(playlist.segments[1].sequence, 6);
 });
+
+test("parseMediaPlaylist supports key rotation", () => {
+  // ARRANGE
+  const content = `#EXTM3U
+#EXT-X-TARGETDURATION:6
+#EXT-X-MEDIA-SEQUENCE:1
+#EXT-X-KEY:METHOD=AES-128,URI="key-a.key",IV=0x0001
+#EXTINF:6.0,Segment 1
+seg-1.ts
+#EXT-X-KEY:METHOD=AES-128,URI="key-b.key",IV=0x0002
+#EXTINF:6.0,Segment 2
+seg-2.ts
+#EXT-X-ENDLIST
+`;
+
+  // ACT
+  const playlist = parseMediaPlaylist(content, "https://example.com/video/low.m3u8");
+
+  // ASSERT
+  assert.equal(playlist.segments.length, 2);
+  assert.equal(playlist.segments[0].key?.uri, "https://example.com/video/key-a.key");
+  assert.equal(playlist.segments[1].key?.uri, "https://example.com/video/key-b.key");
+});

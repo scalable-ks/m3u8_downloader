@@ -1,10 +1,15 @@
 import type { DownloadJob, JobProgress, JobState } from "../domain/types.ts";
 import type { ErrorCode } from "../domain/errors.ts";
+import type { CleanupPolicy, DownloadPlan, JobConstraints } from "./models.ts";
+import type { CookieInput } from "./plan.ts";
 
 export interface StartJobRequest {
   id: string;
   masterPlaylistUri: string;
   headers?: Record<string, string>;
+  cookies?: CookieInput;
+  constraints?: JobConstraints;
+  cleanupPolicy?: CleanupPolicy;
 }
 
 export interface JobStatus {
@@ -22,6 +27,7 @@ export interface JobError {
 
 export interface DownloaderBridge {
   startJob(request: StartJobRequest): Promise<DownloadJob>;
+  startPlannedJob?(plan: DownloadPlan): Promise<DownloadJob>;
   pauseJob(id: string): Promise<JobStatus>;
   resumeJob(id: string): Promise<JobStatus>;
   cancelJob(id: string): Promise<JobStatus>;
