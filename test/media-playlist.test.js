@@ -16,7 +16,13 @@ seg-6.ts
 `;
 
 test("parseMediaPlaylist parses segments, keys, maps", () => {
-  const playlist = parseMediaPlaylist(media, "https://example.com/video/low.m3u8");
+  // ARRANGE
+  const uri = "https://example.com/video/low.m3u8";
+
+  // ACT
+  const playlist = parseMediaPlaylist(media, uri);
+
+  // ASSERT
   assert.equal(playlist.targetDuration, 6);
   assert.equal(playlist.mediaSequence, 5);
   assert.equal(playlist.isLive, false);

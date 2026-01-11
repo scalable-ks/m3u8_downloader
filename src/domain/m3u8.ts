@@ -1,5 +1,7 @@
 import type { MasterPlaylist, MediaTrack, Resolution, Variant } from "./types.ts";
 
+const NOT_FOUND = -1;
+
 function splitAttributes(raw: string): string[] {
   const parts: string[] = [];
   let current = "";
@@ -29,7 +31,7 @@ function parseAttributes(raw: string): Record<string, string> {
   const attrs: Record<string, string> = {};
   for (const part of splitAttributes(raw)) {
     const idx = part.indexOf("=");
-    if (idx === -1) {
+    if (idx === NOT_FOUND) {
       continue;
     }
     const key = part.slice(0, idx).trim();

@@ -8,6 +8,23 @@ function normalizeLanguage(lang?: string): string | undefined {
   return lang?.trim().toLowerCase();
 }
 
+function canonicalizeLanguage(lang?: string): AudioLanguage | undefined {
+  const normalized = normalizeLanguage(lang);
+  if (!normalized) {
+    return undefined;
+  }
+  if (normalized === "eng" || normalized === "en" || normalized.startsWith("en-")) {
+    return "eng";
+  }
+  if (normalized === "spa" || normalized === "es" || normalized.startsWith("es-")) {
+    return "spa";
+  }
+  if (normalized === "esp") {
+    return "esp";
+  }
+  return undefined;
+}
+
 function matchesLanguage(lang: string, preferred: AudioLanguage): boolean {
   const normalized = normalizeLanguage(lang);
   if (!normalized) {
@@ -46,11 +63,14 @@ function filterByGroup(tracks: MediaTrack[], groupId?: string): MediaTrack[] {
     return tracks;
   }
   const grouped = tracks.filter((track) => track.groupId === groupId);
-  return grouped.length > 0 ? grouped : tracks;
+  return grouped;
 }
 
 function pickAudioTrack(tracks: MediaTrack[], groupId?: string): MediaTrack | undefined {
   const candidates = filterByGroup(tracks, groupId);
+  if (groupId && candidates.length === 0) {
+    return undefined;
+  }
   for (const preferred of AUDIO_LANGUAGE_PRIORITY) {
     const match = candidates.find((track) => track.language && matchesLanguage(track.language, preferred));
     if (match) {
@@ -65,12 +85,18 @@ function pickSubtitleTrack(
   groupId: string | undefined,
   audioLanguage?: string,
 ): MediaTrack | undefined {
-  if (!audioLanguage) {
+  if (!audioLanguage || !groupId) {
     return undefined;
   }
   const candidates = filterByGroup(tracks, groupId);
-  const match = candidates.find((track) => track.language && normalizeLanguage(track.language) === normalizeLanguage(audioLanguage));
-  return match;
+  if (groupId && candidates.length === 0) {
+    return undefined;
+  }
+  const audioLang = canonicalizeLanguage(audioLanguage);
+  if (!audioLang) {
+    return undefined;
+  }
+  return candidates.find((track) => canonicalizeLanguage(track.language) === audioLang);
 }
 
 export function selectTracks(master: MasterPlaylist): SelectedTracks {

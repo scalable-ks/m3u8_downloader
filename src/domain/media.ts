@@ -1,5 +1,7 @@
 import { resolveUri } from "./m3u8.ts";
 
+const NOT_FOUND = -1;
+
 export interface ByteRange {
   length: number;
   offset?: number;
@@ -65,7 +67,7 @@ function parseAttributes(raw: string): Record<string, string> {
   const attrs: Record<string, string> = {};
   for (const part of splitAttributes(raw)) {
     const idx = part.indexOf("=");
-    if (idx === -1) {
+    if (idx === NOT_FOUND) {
       continue;
     }
     const key = part.slice(0, idx).trim();
