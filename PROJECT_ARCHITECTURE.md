@@ -79,6 +79,10 @@ This document summarizes modern, widely used architecture practices for a React 
 - **Large playlists**: parse line-by-line to avoid extra allocations on low-memory devices.
 - **Memory profiling**: validate on low-end devices with Android Studio Profiler during large playlist downloads and muxing.
 
+## Optional Capabilities
+- **Live playlists**: merge rolling windows by sequence and compute refresh delays using target duration.
+- **DRM detection**: detect SAMPLE-AES and known KEYFORMAT systems (Widevine/FairPlay/PlayReady) to warn users that offline assembly may be blocked.
+
 ## Testing Strategy (Unit-Heavy)
 - **Unit tests** (JS/TS):
   - Playlist parsing and selection logic.

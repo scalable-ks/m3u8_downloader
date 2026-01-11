@@ -1,6 +1,9 @@
 import { resolveUri } from "./m3u8.ts";
 
 const NOT_FOUND = -1;
+const DEFAULT_RELOAD_MS = 5000;
+const MIN_RELOAD_MS = 1000;
+const MS_PER_SECOND = 1000;
 
 export interface ByteRange {
   length: number;
@@ -222,4 +225,42 @@ export function parseMediaPlaylist(content: string, playlistUri: string): MediaP
     segments,
     isLive,
   };
+}
+
+export function mergeLivePlaylist(
+  previous: MediaPlaylist,
+  next: MediaPlaylist,
+): MediaPlaylist {
+  if (!previous.isLive) {
+    return next;
+  }
+  const combined = new Map<number, Segment>();
+  for (const segment of previous.segments) {
+    combined.set(segment.sequence, segment);
+  }
+  for (const segment of next.segments) {
+    combined.set(segment.sequence, segment);
+  }
+  const minSequence =
+    next.mediaSequence ?? next.segments[0]?.sequence ?? previous.segments[0]?.sequence;
+  const mergedSegments = Array.from(combined.values())
+    .filter((segment) => (minSequence !== undefined ? segment.sequence >= minSequence : true))
+    .sort((a, b) => a.sequence - b.sequence);
+  return {
+    ...next,
+    segments: mergedSegments,
+  };
+}
+
+export function nextReloadDelayMs(playlist: MediaPlaylist): number {
+  if (!playlist.isLive) {
+    return 0;
+  }
+  const target = playlist.targetDuration ? playlist.targetDuration * MS_PER_SECOND : undefined;
+  const lastDuration =
+    playlist.segments.length > 0
+      ? playlist.segments[playlist.segments.length - 1].duration * MS_PER_SECOND
+      : undefined;
+  const candidate = target ?? lastDuration ?? DEFAULT_RELOAD_MS;
+  return Math.max(candidate, MIN_RELOAD_MS);
 }
