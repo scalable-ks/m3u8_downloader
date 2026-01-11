@@ -25,16 +25,23 @@ android/build/
 android/app/build/
 android/local.properties
 android/captures/
+android/.cxx/
+android/.externalNativeBuild/
+android/.kotlin/
 android/**/generated/
 android/**/outputs/
 android/**/intermediates/
 android/**/tmp/
+android/libs/*.aar
 *.apk
 *.aab
 *.hprof
 *.keystore
 *.jks
 android/keystore.properties
+
+# Local tools
+bin/
 
 # iOS
 ios/build/

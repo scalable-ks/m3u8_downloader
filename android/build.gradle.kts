@@ -4,6 +4,11 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
 }
 
+repositories {
+    google()
+    mavenCentral()
+}
+
 android {
     namespace = "com.rnandroidhls"
     compileSdk = 34
@@ -36,6 +41,12 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    val ffmpegAar = file("libs/ffmpeg-kit-full.aar")
+    if (ffmpegAar.exists()) {
+        add("implementation", files(ffmpegAar))
+        add("implementation", "com.arthenica:smart-exception-java:0.2.1")
+        add("implementation", "com.arthenica:smart-exception-java9:0.2.1")
+    }
 }
 
 tasks.withType<Test>().configureEach {

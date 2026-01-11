@@ -33,6 +33,7 @@
    - ffmpeg-kit: concat/remux; re-encode only when required for compatibility.
    - If source video codec is not H.264, allow video transcode to H.264.
    - Embed subtitles as mov_text when language matches.
+   - Use concat list helper for fMP4 init segments; merge SRT segments before embedding.
 
 5) Export to SD (Android 11)
    - SAF (ACTION_OPEN_DOCUMENT_TREE) for folder selection.

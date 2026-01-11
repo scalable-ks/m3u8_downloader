@@ -26,6 +26,11 @@ tasks:
     cmds:
       - ./gradlew test
 
+  ffmpeg:fetch:
+    desc: Download ffmpeg-kit AAR into android/libs (requires FFMPEG_KIT_AAR_URL)
+    cmds:
+      - ./scripts/fetch_ffmpeg_kit_aar.sh
+
   pipe:
     desc: Run all lint and unit tests (fail fast)
     cmds:

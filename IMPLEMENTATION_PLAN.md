@@ -56,6 +56,7 @@ This plan is derived from `PLAN.md` and `PROJECT_ARCHITECTURE.md`.
    - normalize timestamps/encoding
    - embed as mov_text when language matches
    - note segmented WebVTT support if present in source playlists
+   - concat list helper for fMP4 init segments
 
 ## Phase 5: App Integration
 1) React Native UI (progress, pause/resume, error states).

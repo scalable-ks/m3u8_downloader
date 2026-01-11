@@ -44,6 +44,8 @@ This document summarizes modern, widely used architecture practices for a React 
   - Per-segment state persisted for resume after process death/reboot.
 - **Storage**: app-specific external storage for temp files; SAF/MediaStore export.
 - **Muxing**: ffmpeg-kit (concat/remux, optional transcode).
+  - FFmpegKit AAR setup: `android/FFMPEG_KIT_SETUP.md`
+  - Concat list + subtitle merge helpers: `android/src/main/java/com/rnandroidhls/muxing`
 - **Background Execution**: WorkManager for deferrable downloads; Foreground Service when long-running and user-visible.
   - Rule: use Foreground Service for active user-initiated downloads; fall back to WorkManager for deferred/resume work.
 
