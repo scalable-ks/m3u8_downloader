@@ -78,6 +78,15 @@ private class RecordingErrorListener : ErrorListener {
     }
 }
 
+private class DenyConstraintChecker : ConstraintChecker {
+    override fun check(
+        constraints: JobConstraints,
+        request: DownloadRequest,
+    ): ConstraintResult {
+        return ConstraintResult(allowed = false, reason = "Requires unmetered")
+    }
+}
+
 private class FakeSegmentDownloader(
     private val failOnSequence: Long? = null,
 ) : SegmentDownloader(OkHttpClient()) {
@@ -179,6 +188,89 @@ class JobDownloaderTest {
             val finalState = stateStore.get(request.id)
             assertEquals(JobState.FAILED, finalState?.state)
             assertTrue(errorListener.errors.isNotEmpty())
+        }
+
+    @Test
+    fun `fails fast when constraints are not met`() =
+        runBlocking {
+            // ARRANGE
+            val stateStore = InMemoryStateStore()
+            val progressListener = RecordingProgressListener()
+            val errorListener = RecordingErrorListener()
+            val downloader =
+                JobDownloader(
+                    stateStore,
+                    progressListener,
+                    errorListener,
+                    constraintChecker = DenyConstraintChecker(),
+                )
+            val outputDir = createTempDirectory().toFile()
+            val request =
+                DownloadRequest(
+                    id = "job-constraints",
+                    playlistUri = "https://example.com/master.m3u8",
+                    outputDir = outputDir,
+                    constraints = JobConstraints(requiresUnmetered = true),
+                )
+            val segments =
+                listOf(
+                    Segment("https://example.com/seg1.ts", duration = 4.0, sequence = 1),
+                )
+
+            // ACT
+            downloader.start(request, segments)
+
+            // ASSERT
+            val finalState = stateStore.get(request.id)
+            assertEquals(JobState.FAILED, finalState?.state)
+            assertTrue(errorListener.errors.contains("constraints"))
+        }
+
+    @Test
+    fun `cleans up temp files after job failure when policy enabled`() =
+        runBlocking {
+            // ARRANGE
+            val stateStore = InMemoryStateStore()
+            val progressListener = RecordingProgressListener()
+            val errorListener = RecordingErrorListener()
+            val fakeDownloader = FakeSegmentDownloader(failOnSequence = 1)
+            val downloader =
+                JobDownloader(
+                    stateStore,
+                    progressListener,
+                    errorListener,
+                    retryPolicy = RetryPolicy(maxAttempts = 1, baseDelayMs = 10, maxDelayMs = 50),
+                    segmentDownloader = fakeDownloader,
+                )
+            val outputDir = createTempDirectory().toFile()
+            val partialFile = File(outputDir, "segment_1.partial").apply { writeText("partial") }
+            val completedFile = File(outputDir, "segment_2.bin").apply { writeText("done") }
+            val request =
+                DownloadRequest(
+                    id = "job-cleanup",
+                    playlistUri = "https://example.com/master.m3u8",
+                    outputDir = outputDir,
+                    cleanupPolicy = CleanupPolicy(deleteOnFailure = true),
+                )
+            val segments =
+                listOf(
+                    Segment("https://example.com/seg1.ts", duration = 4.0, sequence = 1),
+                    Segment("https://example.com/seg2.ts", duration = 4.0, sequence = 2),
+                )
+
+            // ACT
+            downloader.start(request, segments)
+
+            // ASSERT
+            withTimeout(5_000) {
+                while (true) {
+                    val state = stateStore.get(request.id)
+                    if (state != null && state.state == JobState.FAILED) break
+                    delay(50)
+                }
+            }
+            assertTrue(!partialFile.exists())
+            assertTrue(!completedFile.exists())
         }
 
     @Test

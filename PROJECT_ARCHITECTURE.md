@@ -73,6 +73,12 @@ This document summarizes modern, widely used architecture practices for a React 
 - **Compliance**: adhere to scoped storage, no legacy external storage flags.
 - **Observability**: structured logs and error codes.
 
+## Hardening & Profiling
+- **Constraints**: apply unmetered/charging/idle checks before starting jobs; prefer WorkManager constraints for background runs.
+- **Cleanup policy**: remove partial and failed job artifacts based on configured cleanup rules.
+- **Large playlists**: parse line-by-line to avoid extra allocations on low-memory devices.
+- **Memory profiling**: validate on low-end devices with Android Studio Profiler during large playlist downloads and muxing.
+
 ## Testing Strategy (Unit-Heavy)
 - **Unit tests** (JS/TS):
   - Playlist parsing and selection logic.

@@ -55,28 +55,44 @@ function parseResolution(value?: string): Resolution | undefined {
   return { width: Number(match[1]), height: Number(match[2]) };
 }
 
+function* iterateLines(content: string): IterableIterator<string> {
+  let start = 0;
+  for (let i = 0; i <= content.length; i += 1) {
+    if (i === content.length || content[i] === "\n") {
+      let line = content.slice(start, i);
+      if (line.endsWith("\r")) {
+        line = line.slice(0, -1);
+      }
+      line = line.trim();
+      if (line.length > 0) {
+        yield line;
+      }
+      start = i + 1;
+    }
+  }
+}
+
 export function resolveUri(baseUri: string, ref: string): string {
   return new URL(ref, baseUri).toString();
 }
 
 export function parseMasterPlaylist(content: string, playlistUri: string): MasterPlaylist {
-  const lines = content.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
   const variants: Variant[] = [];
   const audios: MediaTrack[] = [];
   const subtitles: MediaTrack[] = [];
+  let pendingVariantAttrs: Record<string, string> | null = null;
 
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-
+  for (const line of iterateLines(content)) {
     if (line.startsWith("#EXT-X-STREAM-INF:")) {
       const attrText = line.slice("#EXT-X-STREAM-INF:".length);
-      const attrs = parseAttributes(attrText);
-      const nextUriLine = lines[i + 1];
-      if (!nextUriLine || nextUriLine.startsWith("#")) {
-        continue;
-      }
+      pendingVariantAttrs = parseAttributes(attrText);
+      continue;
+    }
+
+    if (pendingVariantAttrs && !line.startsWith("#")) {
+      const attrs = pendingVariantAttrs;
       const variant: Variant = {
-        uri: resolveUri(playlistUri, nextUriLine),
+        uri: resolveUri(playlistUri, line),
         bandwidth: attrs.BANDWIDTH ? Number(attrs.BANDWIDTH) : undefined,
         resolution: parseResolution(attrs.RESOLUTION),
         codecs: attrs.CODECS,
@@ -84,7 +100,7 @@ export function parseMasterPlaylist(content: string, playlistUri: string): Maste
         subtitleGroupId: attrs.SUBTITLES,
       };
       variants.push(variant);
-      i += 1;
+      pendingVariantAttrs = null;
       continue;
     }
 

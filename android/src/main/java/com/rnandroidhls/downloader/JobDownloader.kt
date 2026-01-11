@@ -22,6 +22,7 @@ class JobDownloader(
     private val maxParallel: Int = 3,
     private val segmentDownloader: SegmentDownloader? = null,
     private val maxFailures: Int = 5,
+    private val constraintChecker: ConstraintChecker = NoopConstraintChecker,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val isCanceled = AtomicBoolean(false)
@@ -36,9 +37,12 @@ class JobDownloader(
     fun cancel(
         jobId: String,
         outputDir: File,
+        cleanupPolicy: CleanupPolicy = CleanupPolicy(),
     ) {
         isCanceled.set(true)
-        cleanupPartialFiles(outputDir)
+        if (cleanupPolicy.deleteOnCancel) {
+            cleanupFiles(outputDir, deleteCompleted = false)
+        }
         val state = stateStore.get(jobId)
         if (state != null) {
             stateStore.save(state.copy(state = JobState.CANCELED, updatedAt = System.currentTimeMillis()))
@@ -49,6 +53,26 @@ class JobDownloader(
         request: DownloadRequest,
         segments: List<Segment>,
     ) {
+        val constraintResult = constraintChecker.check(request.constraints, request)
+        if (!constraintResult.allowed) {
+            val failedState =
+                DownloadJobState(
+                    id = request.id,
+                    playlistUri = request.playlistUri,
+                    playlistMetadata = request.playlistMetadata,
+                    state = JobState.FAILED,
+                    segments = emptyList(),
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                )
+            stateStore.save(failedState)
+            errorListener.onError(
+                request.id,
+                "constraints",
+                constraintResult.reason ?: "Constraints not met",
+            )
+            return
+        }
         if (!ensureDiskSpace(request)) {
             val failedState =
                 DownloadJobState(
@@ -147,17 +171,19 @@ class JobDownloader(
                                     )
                                     val failures = failureCount.incrementAndGet()
                                     if (failures >= maxFailures) {
-                                        updateJobStateIfDone(request.id)
-                                        errorListener.onError(
-                                            request.id,
-                                            "network",
-                                            "Failure budget exceeded",
+                                        stateStore.save(
+                                            stateStore.get(request.id)?.copy(
+                                                state = JobState.FAILED,
+                                                updatedAt = System.currentTimeMillis(),
+                                            ) ?: return@withPermit,
                                         )
-                                        cancel(request.id, request.outputDir)
+                                        errorListener.onError(request.id, "network", "Failure budget exceeded")
+                                        stopDownloadsOnFailure(request)
                                         return@withPermit
                                     }
                                     updateJobStateIfDone(request.id)
                                     errorListener.onError(request.id, "network", e.message ?: "download failed")
+                                    stopDownloadsOnFailure(request)
                                     return@withPermit
                                 }
                                 delay(retryPolicy.nextDelayMs(attempt))
@@ -182,6 +208,10 @@ class JobDownloader(
         scope.launch {
             jobs.joinAll()
             updateJobStateIfDone(request.id)
+            val state = stateStore.get(request.id)
+            if (state?.state == JobState.COMPLETED && request.cleanupPolicy.deleteOnSuccess) {
+                cleanupFiles(request.outputDir, deleteCompleted = true)
+            }
         }
     }
 
@@ -259,8 +289,22 @@ class JobDownloader(
         return finalFile.exists()
     }
 
-    private fun cleanupPartialFiles(outputDir: File) {
+    private fun cleanupFiles(
+        outputDir: File,
+        deleteCompleted: Boolean,
+    ) {
         val files = outputDir.listFiles() ?: return
         files.filter { it.name.endsWith(".partial") }.forEach { it.delete() }
+        if (deleteCompleted) {
+            files.filter { it.name.startsWith("segment_") && it.name.endsWith(".bin") }
+                .forEach { it.delete() }
+        }
+    }
+
+    private fun stopDownloadsOnFailure(request: DownloadRequest) {
+        isCanceled.set(true)
+        if (request.cleanupPolicy.deleteOnFailure) {
+            cleanupFiles(request.outputDir, deleteCompleted = true)
+        }
     }
 }

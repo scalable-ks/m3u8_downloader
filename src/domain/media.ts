@@ -106,8 +106,24 @@ function parseExtInf(raw: string): { duration: number; title?: string } | undefi
   return title ? { duration, title } : { duration };
 }
 
+function* iterateLines(content: string): IterableIterator<string> {
+  let start = 0;
+  for (let i = 0; i <= content.length; i += 1) {
+    if (i === content.length || content[i] === "\n") {
+      let line = content.slice(start, i);
+      if (line.endsWith("\r")) {
+        line = line.slice(0, -1);
+      }
+      line = line.trim();
+      if (line.length > 0) {
+        yield line;
+      }
+      start = i + 1;
+    }
+  }
+}
+
 export function parseMediaPlaylist(content: string, playlistUri: string): MediaPlaylist {
-  const lines = content.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
   const segments: Segment[] = [];
 
   let targetDuration: number | undefined;
@@ -121,9 +137,7 @@ export function parseMediaPlaylist(content: string, playlistUri: string): MediaP
 
   let sequence = 0;
 
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-
+  for (const line of iterateLines(content)) {
     if (line.startsWith("#EXT-X-TARGETDURATION:")) {
       const value = Number(line.slice("#EXT-X-TARGETDURATION:".length));
       if (Number.isFinite(value)) {

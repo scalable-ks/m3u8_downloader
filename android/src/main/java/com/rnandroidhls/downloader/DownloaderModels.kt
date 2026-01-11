@@ -68,6 +68,38 @@ data class JobProgress(
     val totalSegments: Int,
 )
 
+data class JobConstraints(
+    val requiresUnmetered: Boolean = false,
+    val requiresCharging: Boolean = false,
+    val requiresIdle: Boolean = false,
+    val requiresStorageNotLow: Boolean = false,
+)
+
+data class CleanupPolicy(
+    val deleteOnFailure: Boolean = true,
+    val deleteOnCancel: Boolean = true,
+    val deleteOnSuccess: Boolean = false,
+)
+
+data class ConstraintResult(
+    val allowed: Boolean,
+    val reason: String? = null,
+)
+
+interface ConstraintChecker {
+    fun check(
+        constraints: JobConstraints,
+        request: DownloadRequest,
+    ): ConstraintResult
+}
+
+object NoopConstraintChecker : ConstraintChecker {
+    override fun check(
+        constraints: JobConstraints,
+        request: DownloadRequest,
+    ): ConstraintResult = ConstraintResult(allowed = true)
+}
+
 data class DownloadRequest(
     val id: String,
     val playlistUri: String,
@@ -76,4 +108,6 @@ data class DownloadRequest(
     val requiredBytes: Long? = null,
     val playlistMetadata: String? = null,
     val exportTreeUri: String? = null,
+    val constraints: JobConstraints = JobConstraints(),
+    val cleanupPolicy: CleanupPolicy = CleanupPolicy(),
 )
