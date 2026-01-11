@@ -6,17 +6,22 @@
 - Subtitles: only if the language matches audio, otherwise skip; embed inside MP4.
 - Output file: MP4 (H.264 + AAC), compatible with VLC.
 - Save to SD on Android 11 via SAF/MediaStore.
+- Be robust to network interruptions and resume after app restarts.
+- Keep memory use low via streaming IO and bounded concurrency.
 
 ## Steps
 1) Master playlist parser
    - Pick the minimal quality by RESOLUTION/BANDWIDTH.
-   - Choose audio group by language (eng -> spa/esp -> first).
+   - Choose audio group by language (eng -> spa -> esp -> first).
    - Choose subtitles only when language matches audio.
    - Follow media playlists (video/audio/subs), check for #EXT-X-KEY.
+   - Note segmented subtitle formats (e.g., WebVTT) if present.
 
 2) Native segment downloader (Kotlin)
-   - Queue with concurrency limit (4-8).
-   - Retries with backoff, resume by skipping already downloaded.
+   - Queue with concurrency limit (default 2-4 on low-memory devices, configurable).
+   - Retries with backoff + jitter, resume by skipping already downloaded.
+   - Range requests for partial segment resume; append to .partial files.
+   - Persist per-segment bytes and job state (DB/file) for resume after restart.
    - Progress by bytes and segments.
    - Temporary storage in app-specific external.
 
@@ -25,7 +30,8 @@
    - Decrypt on the fly before writing.
 
 4) MP4 assembly
-   - ffmpeg-kit: concat/remux (no re-encode).
+   - ffmpeg-kit: concat/remux; re-encode only when required for compatibility.
+   - If source video codec is not H.264, allow video transcode to H.264.
    - Embed subtitles as mov_text when language matches.
 
 5) Export to SD (Android 11)
