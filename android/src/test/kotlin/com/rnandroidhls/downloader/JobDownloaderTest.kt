@@ -4,6 +4,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
+import okio.Buffer
 import okio.buffer
 import okio.sink
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -11,6 +16,10 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.io.path.createTempDirectory
@@ -170,5 +179,201 @@ class JobDownloaderTest {
             val finalState = stateStore.get(request.id)
             assertEquals(JobState.FAILED, finalState?.state)
             assertTrue(errorListener.errors.isNotEmpty())
+        }
+
+    @Test
+    fun `retries segment download after transient failure`() =
+        runBlocking {
+            // ARRANGE
+            val attempt = AtomicInteger(0)
+            val server = MockWebServer()
+            server.dispatcher =
+                object : Dispatcher() {
+                    override fun dispatch(request: RecordedRequest): MockResponse {
+                        if (request.path == "/seg1.ts") {
+                            return if (attempt.incrementAndGet() == 1) {
+                                MockResponse().setResponseCode(500)
+                            } else {
+                                MockResponse().setBody("data")
+                            }
+                        }
+                        return MockResponse().setResponseCode(404)
+                    }
+                }
+            server.start()
+
+            val stateStore = InMemoryStateStore()
+            val progressListener = RecordingProgressListener()
+            val errorListener = RecordingErrorListener()
+            val retryPolicy = RetryPolicy(maxAttempts = 2, baseDelayMs = 10, maxDelayMs = 50)
+            val downloader =
+                JobDownloader(
+                    stateStore,
+                    progressListener,
+                    errorListener,
+                    retryPolicy = retryPolicy,
+                    segmentDownloader = SegmentDownloader(OkHttpClient()),
+                )
+            val outputDir = createTempDirectory().toFile()
+            val request =
+                DownloadRequest(
+                    id = "job-3",
+                    playlistUri = "https://example.com/master.m3u8",
+                    outputDir = outputDir,
+                )
+            val segments =
+                listOf(
+                    Segment(server.url("/seg1.ts").toString(), duration = 4.0, sequence = 1),
+                )
+
+            // ACT
+            downloader.start(request, segments)
+
+            // ASSERT
+            withTimeout(5_000) {
+                while (true) {
+                    val state = stateStore.get(request.id)
+                    if (state != null && state.state == JobState.COMPLETED) break
+                    delay(50)
+                }
+            }
+            val finalFile = File(outputDir, "segment_1.bin")
+            assertTrue(finalFile.exists())
+            assertEquals("data", finalFile.readText())
+            assertTrue(errorListener.errors.isEmpty())
+
+            server.shutdown()
+        }
+
+    @Test
+    fun `resumes partial segment with range request`() =
+        runBlocking {
+            // ARRANGE
+            val server = MockWebServer()
+            server.enqueue(MockResponse().setResponseCode(206).setBody("world"))
+            server.start()
+
+            val stateStore = InMemoryStateStore()
+            val progressListener = RecordingProgressListener()
+            val errorListener = RecordingErrorListener()
+            val downloader =
+                JobDownloader(
+                    stateStore,
+                    progressListener,
+                    errorListener,
+                    segmentDownloader = SegmentDownloader(OkHttpClient()),
+                )
+            val outputDir = createTempDirectory().toFile()
+            val partialFile = File(outputDir, "segment_1.partial")
+            partialFile.sink(append = false).buffer().use { it.writeUtf8("hello ") }
+            val request =
+                DownloadRequest(
+                    id = "job-4",
+                    playlistUri = "https://example.com/master.m3u8",
+                    outputDir = outputDir,
+                )
+            val segments =
+                listOf(
+                    Segment(server.url("/seg1.ts").toString(), duration = 4.0, sequence = 1),
+                )
+
+            // ACT
+            downloader.start(request, segments)
+
+            // ASSERT
+            withTimeout(5_000) {
+                while (true) {
+                    val state = stateStore.get(request.id)
+                    if (state != null && state.state == JobState.COMPLETED) break
+                    delay(50)
+                }
+            }
+            val requestCapture = server.takeRequest()
+            assertEquals("bytes=6-", requestCapture.getHeader("Range"))
+            val finalFile = File(outputDir, "segment_1.bin")
+            assertTrue(finalFile.exists())
+            assertEquals("hello world", finalFile.readText())
+            assertTrue(errorListener.errors.isEmpty())
+
+            server.shutdown()
+        }
+
+    @Test
+    fun `downloads and decrypts segment in job flow`() =
+        runBlocking {
+            // ARRANGE
+            val keyBytes = "0123456789abcdef".toByteArray()
+            val ivBytes = ByteArray(16)
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            cipher.init(
+                Cipher.ENCRYPT_MODE,
+                SecretKeySpec(keyBytes, "AES"),
+                IvParameterSpec(ivBytes),
+            )
+            val plaintext = "secret"
+            val encrypted = cipher.doFinal(plaintext.toByteArray())
+
+            val server = MockWebServer()
+            server.dispatcher =
+                object : Dispatcher() {
+                    override fun dispatch(request: RecordedRequest): MockResponse {
+                        return when (request.path) {
+                            "/seg1.ts" -> MockResponse().setBody(Buffer().write(encrypted))
+                            "/key" -> MockResponse().setBody(Buffer().write(keyBytes))
+                            else -> MockResponse().setResponseCode(404)
+                        }
+                    }
+                }
+            server.start()
+
+            val stateStore = InMemoryStateStore()
+            val progressListener = RecordingProgressListener()
+            val errorListener = RecordingErrorListener()
+            val downloader =
+                JobDownloader(
+                    stateStore,
+                    progressListener,
+                    errorListener,
+                    segmentDownloader = SegmentDownloader(OkHttpClient()),
+                )
+            val outputDir = createTempDirectory().toFile()
+            val request =
+                DownloadRequest(
+                    id = "job-5",
+                    playlistUri = "https://example.com/master.m3u8",
+                    outputDir = outputDir,
+                )
+            val segments =
+                listOf(
+                    Segment(
+                        uri = server.url("/seg1.ts").toString(),
+                        duration = 4.0,
+                        sequence = 1,
+                        key =
+                            SegmentKey(
+                                method = "AES-128",
+                                uri = server.url("/key").toString(),
+                                iv = "0x00000000000000000000000000000000",
+                            ),
+                    ),
+                )
+
+            // ACT
+            downloader.start(request, segments)
+
+            // ASSERT
+            withTimeout(5_000) {
+                while (true) {
+                    val state = stateStore.get(request.id)
+                    if (state != null && state.state == JobState.COMPLETED) break
+                    delay(50)
+                }
+            }
+            val finalFile = File(outputDir, "segment_1.bin")
+            assertTrue(finalFile.exists())
+            assertEquals(plaintext, finalFile.readText())
+            assertTrue(errorListener.errors.isEmpty())
+
+            server.shutdown()
         }
 }
