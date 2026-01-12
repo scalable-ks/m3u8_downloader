@@ -13,13 +13,13 @@ function App(): JSX.Element {
   const logger = useMemo<Logger>(
     () => ({
       info(message, context) {
-        setLogs((current) => [`INFO ${message}`, ...current].slice(0, 12));
+        setLogs((current) => [`INFO ${message}`, ...current].slice(0, 16));
       },
       warn(message, context) {
-        setLogs((current) => [`WARN ${message}`, ...current].slice(0, 12));
+        setLogs((current) => [`WARN ${message}`, ...current].slice(0, 16));
       },
       error(message, context) {
-        setLogs((current) => [`ERROR ${message}`, ...current].slice(0, 12));
+        setLogs((current) => [`ERROR ${message}`, ...current].slice(0, 16));
       },
     }),
     [],
@@ -33,6 +33,7 @@ function App(): JSX.Element {
   }, [bridge, manager]);
 
   const handleStart = async (playlistUri: string) => {
+    logger.info("start pressed");
     if (!playlistUri) {
       manager.handleError({
         id: "ui",
@@ -49,6 +50,7 @@ function App(): JSX.Element {
       });
       return;
     }
+    logger.info("start job", { playlistUri, exportTreeUri: selectedFolder });
     const job = await manager.start({
       id: `job-${Date.now()}`,
       masterPlaylistUri: playlistUri,
@@ -62,8 +64,10 @@ function App(): JSX.Element {
   };
 
   const handlePickFolder = async () => {
+    logger.info("pick folder pressed");
     const uri = await pickDirectory();
     if (uri) {
+      logger.info("folder selected", { uri });
       setSelectedFolder(uri);
     }
   };
