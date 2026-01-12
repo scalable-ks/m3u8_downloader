@@ -7,6 +7,8 @@ import { useDownloadJobs } from "./useDownloadJobs.tsx";
 interface DownloadScreenProps {
   manager: DownloadManager;
   onStart: (playlistUri: string) => Promise<void>;
+  onPickFolder: () => Promise<void>;
+  selectedFolder?: string | null;
   defaultUri?: string;
 }
 
@@ -59,6 +61,15 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
           autoCapitalize="none"
           autoCorrect={false}
         />
+        <Text style={styles.label}>SAVE FOLDER</Text>
+        <View style={styles.folderRow}>
+          <Text style={styles.folderPath} numberOfLines={1}>
+            {props.selectedFolder ? props.selectedFolder : "Not selected"}
+          </Text>
+          <Pressable style={styles.action} onPress={props.onPickFolder}>
+            <Text style={styles.actionText}>CHOOSE</Text>
+          </Pressable>
+        </View>
         {lastError ? <Text style={styles.error}>{lastError.message}</Text> : null}
         <Animated.View style={[styles.startButtonWrapper, { transform: [{ scale: pulse }] }]}>
           <Pressable style={styles.startButton} onPress={() => props.onStart(playlistUri.trim())}>
@@ -155,6 +166,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     fontFamily: "monospace",
     marginBottom: 10,
+  },
+  folderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  folderPath: {
+    flex: 1,
+    backgroundColor: "#e2e8f0",
+    borderWidth: 2,
+    borderTopColor: "#ffffff",
+    borderLeftColor: "#ffffff",
+    borderRightColor: "#4b4b4b",
+    borderBottomColor: "#4b4b4b",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    fontFamily: "monospace",
   },
   startButtonWrapper: {
     alignSelf: "center",
