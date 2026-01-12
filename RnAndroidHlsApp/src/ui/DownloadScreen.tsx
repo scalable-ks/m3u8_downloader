@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useRef } from "react";
-import { Animated, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { DownloadJob } from "../domain/types.ts";
 import type { DownloadManager } from "../bridge/downloadManager.ts";
 import { useDownloadJobs } from "./useDownloadJobs.tsx";
 
 interface DownloadScreenProps {
   manager: DownloadManager;
-  onStart: () => Promise<void>;
+  onStart: (playlistUri: string) => Promise<void>;
+  defaultUri?: string;
 }
 
 function formatProgress(job: DownloadJob): string {
@@ -18,6 +19,7 @@ function formatProgress(job: DownloadJob): string {
 export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
   const { jobs, lastError, pause, resume, cancel } = useDownloadJobs(props.manager);
   const pulse = useRef(new Animated.Value(1)).current;
+  const [playlistUri, setPlaylistUri] = useState(props.defaultUri ?? "");
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -47,9 +49,19 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
           <Text style={styles.titleBarText}>DOWNLOADS.EXE</Text>
           <View style={styles.titleBarBadge} />
         </View>
+        <Text style={styles.label}>PLAYLIST URL</Text>
+        <TextInput
+          value={playlistUri}
+          onChangeText={setPlaylistUri}
+          placeholder="https://example.com/master.m3u8"
+          style={styles.input}
+          placeholderTextColor="#6b7280"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
         {lastError ? <Text style={styles.error}>{lastError.message}</Text> : null}
         <Animated.View style={[styles.startButtonWrapper, { transform: [{ scale: pulse }] }]}>
-          <Pressable style={styles.startButton} onPress={props.onStart}>
+          <Pressable style={styles.startButton} onPress={() => props.onStart(playlistUri.trim())}>
             <Text style={styles.startButtonText}>START DOWNLOAD</Text>
           </Pressable>
         </Animated.View>
@@ -125,6 +137,24 @@ const styles = StyleSheet.create({
     color: "#ff005d",
     marginBottom: 8,
     fontFamily: "monospace",
+  },
+  label: {
+    fontFamily: "monospace",
+    fontSize: 12,
+    color: "#0f172a",
+    marginBottom: 4,
+  },
+  input: {
+    backgroundColor: "#fef3c7",
+    borderWidth: 2,
+    borderTopColor: "#ffffff",
+    borderLeftColor: "#ffffff",
+    borderRightColor: "#4b4b4b",
+    borderBottomColor: "#4b4b4b",
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    fontFamily: "monospace",
+    marginBottom: 10,
   },
   startButtonWrapper: {
     alignSelf: "center",

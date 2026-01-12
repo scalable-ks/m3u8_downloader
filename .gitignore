@@ -40,6 +40,28 @@ android/libs/*.aar
 *.jks
 android/keystore.properties
 
+# React Native app
+RnAndroidHlsApp/node_modules/
+RnAndroidHlsApp/android/.gradle/
+RnAndroidHlsApp/android/build/
+RnAndroidHlsApp/android/app/build/
+RnAndroidHlsApp/android/.cxx/
+RnAndroidHlsApp/android/.externalNativeBuild/
+RnAndroidHlsApp/android/.kotlin/
+RnAndroidHlsApp/android/**/generated/
+RnAndroidHlsApp/android/**/outputs/
+RnAndroidHlsApp/android/**/intermediates/
+RnAndroidHlsApp/android/**/tmp/
+RnAndroidHlsApp/ios/Pods/
+RnAndroidHlsApp/ios/build/
+RnAndroidHlsApp/.bundle/
+RnAndroidHlsApp/.turbo/
+RnAndroidHlsApp/.gradle/
+
+# Local keys
+github_deploy_key
+github_deploy_key.pub
+
 # Local tools
 bin/
 

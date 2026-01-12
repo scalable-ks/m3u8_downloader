@@ -1,0 +1,33 @@
+name: Android APK
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: RnAndroidHlsApp/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install JS dependencies
+        working-directory: RnAndroidHlsApp
+        run: npm ci
+      - name: Build debug APK
+        working-directory: RnAndroidHlsApp/android
+        run: ./gradlew assembleDebug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: RnAndroidHlsApp/android/app/build/outputs/apk/debug/app-debug.apk
