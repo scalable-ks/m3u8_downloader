@@ -62,6 +62,9 @@ data class DownloadJobState(
     val segments: List<SegmentState>,
     val createdAt: Long,
     val updatedAt: Long,
+    val lastErrorCode: String? = null,
+    val lastErrorMessage: String? = null,
+    val lastErrorDetail: String? = null,
 )
 
 data class JobProgress(

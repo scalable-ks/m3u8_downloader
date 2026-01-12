@@ -66,6 +66,8 @@ class JobDownloader(
                     segments = emptyList(),
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis(),
+                    lastErrorCode = "constraints",
+                    lastErrorMessage = constraintResult.reason,
                 )
             stateStore.save(failedState)
             errorListener.onError(
@@ -86,6 +88,8 @@ class JobDownloader(
                     segments = emptyList(),
                     createdAt = System.currentTimeMillis(),
                     updatedAt = System.currentTimeMillis(),
+                    lastErrorCode = "storage",
+                    lastErrorMessage = "Insufficient disk space",
                 )
             stateStore.save(failedState)
             errorListener.onError(request.id, "storage", "Insufficient disk space")
@@ -207,6 +211,8 @@ class JobDownloader(
                                             stateStore.get(request.id)?.copy(
                                                 state = JobState.FAILED,
                                                 updatedAt = System.currentTimeMillis(),
+                                                lastErrorCode = "network",
+                                                lastErrorMessage = "Failure budget exceeded",
                                             ) ?: return@withPermit,
                                         )
                                         errorListener.onError(request.id, "network", "Failure budget exceeded")

@@ -103,6 +103,9 @@ class FileDownloadStateStore(
             .put("segments", segments)
             .put("createdAt", state.createdAt)
             .put("updatedAt", state.updatedAt)
+            .put("lastErrorCode", state.lastErrorCode ?: JSONObject.NULL)
+            .put("lastErrorMessage", state.lastErrorMessage ?: JSONObject.NULL)
+            .put("lastErrorDetail", state.lastErrorDetail ?: JSONObject.NULL)
     }
 
     private fun decodeState(json: JSONObject): DownloadJobState {
@@ -132,6 +135,9 @@ class FileDownloadStateStore(
             segments = segments,
             createdAt = json.getLong("createdAt"),
             updatedAt = json.getLong("updatedAt"),
+            lastErrorCode = json.opt("lastErrorCode").takeIf { it != JSONObject.NULL }?.toString(),
+            lastErrorMessage = json.opt("lastErrorMessage").takeIf { it != JSONObject.NULL }?.toString(),
+            lastErrorDetail = json.opt("lastErrorDetail").takeIf { it != JSONObject.NULL }?.toString(),
         )
     }
 }

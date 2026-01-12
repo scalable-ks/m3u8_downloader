@@ -7,6 +7,7 @@ import { pickDirectory } from "./src/bridge/saf.ts";
 import type { Logger } from "./src/bridge/logger.ts";
 import { NativeDownloaderBridge } from "./src/bridge/nativeBridge.ts";
 import { NativeJobStore } from "./src/bridge/nativeJobStore.ts";
+import { parseCookiesInput, parseHeadersInput } from "./src/ui/auth.ts";
 
 function App(): JSX.Element {
   const [logs, setLogs] = useState<string[]>([]);
@@ -39,7 +40,7 @@ function App(): JSX.Element {
     setManager(managerInstance);
   }, [logger]);
 
-  const handleStart = async (playlistUri: string) => {
+  const handleStart = async (playlistUri: string, headersInput: string, cookiesInput: string) => {
     if (!manager) {
       return;
     }
@@ -60,11 +61,26 @@ function App(): JSX.Element {
       });
       return;
     }
+    let headers: Record<string, string> | undefined;
+    let cookies;
+    try {
+      headers = parseHeadersInput(headersInput);
+      cookies = parseCookiesInput(cookiesInput);
+    } catch (error) {
+      manager.handleError({
+        id: "ui",
+        code: "validation",
+        message: error instanceof Error ? error.message : "Invalid auth input.",
+      });
+      return;
+    }
     logger.info("start job", { playlistUri, exportTreeUri: selectedFolder });
     await manager.startPlanned({
       id: `job-${Date.now()}`,
       masterPlaylistUri: playlistUri,
       exportTreeUri: selectedFolder,
+      headers,
+      cookies,
     });
   };
 
