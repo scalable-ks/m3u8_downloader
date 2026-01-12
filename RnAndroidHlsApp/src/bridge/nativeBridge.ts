@@ -1,15 +1,22 @@
 import { NativeEventEmitter, NativeModules, Platform } from "react-native";
 import type { DownloaderBridge, JobError, JobStatus, StartJobRequest } from "./api.ts";
+import type { DownloadJob } from "../domain/types.ts";
 import type { DownloadPlan } from "./models.ts";
 
 const MODULE_NAME = "HlsDownloaderModule";
 
 interface NativeModuleShape {
-  startPlannedJob(planJson: string): Promise<JobStatus>;
+  startPlannedJob(planJson: string): Promise<
+    JobStatus & {
+      masterPlaylistUri?: string;
+      createdAt?: number;
+    }
+  >;
   pauseJob(id: string): Promise<JobStatus>;
   resumeJob(id: string): Promise<JobStatus>;
   cancelJob(id: string): Promise<JobStatus>;
   getJobStatus(id: string): Promise<JobStatus>;
+  listJobs(): Promise<string>;
 }
 
 export class NativeDownloaderBridge implements DownloaderBridge {
@@ -55,6 +62,8 @@ export class NativeDownloaderBridge implements DownloaderBridge {
       id: status.id,
       state: status.state,
       progress: status.progress,
+      masterPlaylistUri: status.masterPlaylistUri ?? plan.masterPlaylistUri,
+      createdAt: status.createdAt ?? Date.now(),
     };
   }
 
@@ -72,5 +81,23 @@ export class NativeDownloaderBridge implements DownloaderBridge {
 
   getJobStatus(id: string) {
     return this.nativeModule.getJobStatus(id);
+  }
+
+  async listJobs(): Promise<DownloadJob[]> {
+    const payload = await this.nativeModule.listJobs();
+    const items = JSON.parse(payload) as Array<{
+      id: string;
+      state: JobStatus["state"];
+      progress: JobStatus["progress"];
+      masterPlaylistUri: string;
+      createdAt: number;
+    }>;
+    return items.map((item) => ({
+      id: item.id,
+      masterPlaylistUri: item.masterPlaylistUri,
+      createdAt: item.createdAt,
+      state: item.state,
+      progress: item.progress,
+    }));
   }
 }

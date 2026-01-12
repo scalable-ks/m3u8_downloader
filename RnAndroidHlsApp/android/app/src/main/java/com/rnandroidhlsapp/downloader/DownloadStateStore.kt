@@ -8,6 +8,8 @@ import java.io.File
 interface DownloadStateStore {
     fun get(jobId: String): DownloadJobState?
 
+    fun list(): List<DownloadJobState>
+
     fun save(state: DownloadJobState)
 
     fun updateSegment(
@@ -28,6 +30,17 @@ class FileDownloadStateStore(
         if (!file.exists()) return null
         val json = JSONObject(file.readText())
         return decodeState(json)
+    }
+
+    override fun list(): List<DownloadJobState> {
+        val dir = stateDir()
+        if (!dir.exists()) return emptyList()
+        return dir.listFiles()
+            ?.filter { it.isFile && it.extension == "json" }
+            ?.mapNotNull { file ->
+                runCatching { decodeState(JSONObject(file.readText())) }.getOrNull()
+            }
+            ?: emptyList()
     }
 
     @Synchronized
@@ -59,12 +72,14 @@ class FileDownloadStateStore(
     }
 
     private fun stateFile(jobId: String): File {
-        val dir = File(baseDir, "download_state")
+        val dir = stateDir()
         if (!dir.exists()) {
             dir.mkdirs()
         }
         return File(dir, "$jobId.json")
     }
+
+    private fun stateDir(): File = File(baseDir, "download_state")
 
     private fun encodeState(state: DownloadJobState): JSONObject {
         val segments = JSONArray()

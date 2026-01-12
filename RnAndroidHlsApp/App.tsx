@@ -6,6 +6,7 @@ import { DownloadManager } from "./src/bridge/downloadManager.ts";
 import { pickDirectory } from "./src/bridge/saf.ts";
 import type { Logger } from "./src/bridge/logger.ts";
 import { NativeDownloaderBridge } from "./src/bridge/nativeBridge.ts";
+import { NativeJobStore } from "./src/bridge/nativeJobStore.ts";
 
 function App(): JSX.Element {
   const [logs, setLogs] = useState<string[]>([]);
@@ -32,7 +33,8 @@ function App(): JSX.Element {
       (status) => managerRef.current?.handleProgress(status),
       (error) => managerRef.current?.handleError(error),
     );
-    const managerInstance = new DownloadManager(bridge, undefined, logger);
+    const store = new NativeJobStore(() => bridge.listJobs());
+    const managerInstance = new DownloadManager(bridge, store, logger);
     managerRef.current = managerInstance;
     setManager(managerInstance);
   }, [logger]);
