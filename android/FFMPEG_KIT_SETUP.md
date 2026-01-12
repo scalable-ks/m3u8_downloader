@@ -6,6 +6,12 @@ This project expects an FFmpegKit Android AAR at:
 android/libs/ffmpeg-kit-full.aar
 ```
 
+The React Native app also expects:
+
+```
+RnAndroidHlsApp/android/app/libs/ffmpeg-kit-full.aar
+```
+
 ## Option A: Use a Prebuilt AAR (Recommended)
 
 If you have a direct AAR URL (internal artifact store or known release asset), run:
@@ -15,6 +21,12 @@ FFMPEG_KIT_AAR_URL=<direct_aar_url> task ffmpeg:fetch
 ```
 
 The script will download the AAR and place it under `android/libs/`.
+
+For the React Native app:
+
+```bash
+FFMPEG_KIT_TARGET=rn FFMPEG_KIT_AAR_URL=<direct_aar_url> ./scripts/fetch_ffmpeg_kit_aar.sh
+```
 
 ## Option B: Build the AAR from Source
 
@@ -43,6 +55,23 @@ export ANDROID_NDK_ROOT=<path_to_android_ndk>
 ```bash
 cp prebuilt/bundle-android-aar-lts/ffmpeg-kit-full-*.aar \
   /path/to/your/project/android/libs/ffmpeg-kit-full.aar
+```
+
+For the React Native app:
+
+```bash
+cp prebuilt/bundle-android-aar-lts/ffmpeg-kit-full-*.aar \
+  /path/to/your/project/RnAndroidHlsApp/android/app/libs/ffmpeg-kit-full.aar
+```
+
+### Helper Script (React Native)
+
+If you have the SDK/NDK installed, you can build and copy in one step:
+
+```bash
+export ANDROID_SDK_ROOT=<path_to_android_sdk>
+export ANDROID_NDK_ROOT=<path_to_android_ndk>
+FFMPEG_KIT_TAG=v6.0.LTS ./scripts/build_ffmpeg_kit_aar.sh
 ```
 
 5) Re-run tests:
