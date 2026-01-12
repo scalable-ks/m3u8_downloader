@@ -20,6 +20,7 @@ data class SegmentKey(
 data class SegmentMap(
     val uri: String,
     val byteRange: ByteRange? = null,
+    val fileKey: String,
 )
 
 data class ByteRange(
@@ -31,6 +32,7 @@ data class Segment(
     val uri: String,
     val duration: Double,
     val sequence: Long,
+    val fileKey: String,
     val byteRange: ByteRange? = null,
     val key: SegmentKey? = null,
     val map: SegmentMap? = null,
@@ -39,6 +41,7 @@ data class Segment(
 data class SegmentState(
     val uri: String,
     val sequence: Long,
+    val fileKey: String,
     val status: SegmentStatus,
     val bytesDownloaded: Long,
     val totalBytes: Long? = null,

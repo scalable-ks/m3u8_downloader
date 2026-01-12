@@ -15,3 +15,10 @@ interface ErrorListener {
         detail: String? = null,
     )
 }
+
+interface CompletionListener {
+    fun onComplete(
+        jobId: String,
+        state: JobState,
+    )
+}

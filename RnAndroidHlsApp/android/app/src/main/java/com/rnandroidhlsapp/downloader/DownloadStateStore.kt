@@ -57,7 +57,7 @@ class FileDownloadStateStore(
         val existing = get(jobId) ?: return
         val updated =
             existing.copy(
-                segments = existing.segments.map { if (it.sequence == segment.sequence) segment else it },
+                segments = existing.segments.map { if (it.fileKey == segment.fileKey) segment else it },
                 updatedAt = System.currentTimeMillis(),
             )
         save(updated)
@@ -89,6 +89,7 @@ class FileDownloadStateStore(
                 JSONObject()
                     .put("uri", segment.uri)
                     .put("sequence", segment.sequence)
+                    .put("fileKey", segment.fileKey)
                     .put("status", segment.status.name)
                     .put("bytesDownloaded", segment.bytesDownloaded)
                     .put("totalBytes", totalBytes ?: JSONObject.NULL),
@@ -113,6 +114,7 @@ class FileDownloadStateStore(
                 SegmentState(
                     uri = item.getString("uri"),
                     sequence = item.getLong("sequence"),
+                    fileKey = item.optString("fileKey", item.getLong("sequence").toString()),
                     status = SegmentStatus.valueOf(item.getString("status")),
                     bytesDownloaded = item.getLong("bytesDownloaded"),
                     totalBytes = item.optLong("totalBytes").takeIf { it > 0 },

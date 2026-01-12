@@ -23,10 +23,17 @@ import com.rnandroidhlsapp.downloader.SegmentStatus
 import com.rnandroidhlsapp.downloader.ByteRange
 import com.rnandroidhlsapp.downloader.CleanupPolicy
 import com.rnandroidhlsapp.downloader.StorageLocator
+import com.rnandroidhlsapp.muxing.ConcatListWriter
+import com.rnandroidhlsapp.muxing.FfmpegKitRunner
+import com.rnandroidhlsapp.muxing.Mp4Assembler
+import com.rnandroidhlsapp.muxing.MuxRequest
+import com.rnandroidhlsapp.muxing.TrackInput
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.concurrent.thread
 
 class HlsDownloaderModule(
     private val reactContext: ReactApplicationContext,
@@ -92,6 +99,7 @@ class HlsDownloaderModule(
                 stateStore = stateStore,
                 progressListener = buildProgressListener(),
                 errorListener = buildErrorListener(),
+                completionListener = buildCompletionListener(jobId),
                 retryPolicy = RetryPolicy.default(),
             )
         context.downloader = downloader
@@ -191,7 +199,10 @@ class HlsDownloaderModule(
         return result
     }
 
-    private fun readSegments(array: JSONArray): List<Segment> {
+    private fun readSegments(
+        array: JSONArray,
+        trackId: String,
+    ): List<Segment> {
         val output = mutableListOf<Segment>()
         for (i in 0 until array.length()) {
             val item = array.getJSONObject(i)
@@ -214,6 +225,7 @@ class HlsDownloaderModule(
                         SegmentMap(
                             uri = mapUri,
                             byteRange = readByteRange(mapJson.optJSONObject("byteRange")),
+                            fileKey = mapFileKey(trackId, mapUri),
                         )
                     } else {
                         null
@@ -221,11 +233,13 @@ class HlsDownloaderModule(
                 } else {
                     null
                 }
+            val sequence = item.getLong("sequence")
             output.add(
                 Segment(
                     uri = item.getString("uri"),
                     duration = item.getDouble("duration"),
-                    sequence = item.getLong("sequence"),
+                    sequence = sequence,
+                    fileKey = segmentFileKey(trackId, sequence),
                     byteRange = readByteRange(item.optJSONObject("byteRange")),
                     key = key,
                     map = map,
@@ -269,16 +283,18 @@ class HlsDownloaderModule(
         val headers = readHeaders(plan.optJSONObject("headers"))
         val exportTreeUri = plan.optString("exportTreeUri", null)
         val outputDir = File(StorageLocator.tempDir(reactContext), "job_$jobId").apply { mkdirs() }
-        val segments = mutableListOf<Segment>()
-        segments.addAll(readSegments(plan.getJSONObject("video").getJSONArray("segments")))
-        plan.optJSONObject("audio")?.optJSONArray("segments")?.let { audioArray ->
-            segments.addAll(readSegments(audioArray))
-        }
+        val videoSegments = readSegments(plan.getJSONObject("video").getJSONArray("segments"), "video")
+        val audioSegments =
+            plan.optJSONObject("audio")?.optJSONArray("segments")?.let { audioArray ->
+                readSegments(audioArray, "audio")
+            } ?: emptyList()
+        val segments = videoSegments + audioSegments
         val downloader =
             JobDownloader(
                 stateStore = stateStore,
                 progressListener = buildProgressListener(),
                 errorListener = buildErrorListener(),
+                completionListener = buildCompletionListener(jobId),
                 retryPolicy = RetryPolicy.default(),
             )
         val request =
@@ -292,7 +308,14 @@ class HlsDownloaderModule(
                 constraints = readConstraints(plan.optJSONObject("constraints")),
                 cleanupPolicy = readCleanupPolicy(plan.optJSONObject("cleanupPolicy")),
             )
-        return JobContext(request, segments, downloader)
+        return JobContext(
+            request = request,
+            segments = segments,
+            videoSegments = videoSegments,
+            audioSegments = audioSegments,
+            exportTreeUri = exportTreeUri,
+            downloader = downloader,
+        )
     }
 
     private fun normalizeState(state: DownloadJobState): DownloadJobState {
@@ -323,6 +346,131 @@ class HlsDownloaderModule(
             .put("createdAt", state.createdAt)
     }
 
+    private fun buildCompletionListener(jobId: String): com.rnandroidhlsapp.downloader.CompletionListener {
+        return object : com.rnandroidhlsapp.downloader.CompletionListener {
+            override fun onComplete(
+                completedJobId: String,
+                state: JobState,
+            ) {
+                if (completedJobId != jobId || state != JobState.COMPLETED) {
+                    return
+                }
+                val context = jobs[completedJobId] ?: return
+                if (context.exportTreeUri.isNullOrBlank()) {
+                    return
+                }
+                thread(start = true) {
+                    runAssemblyAndExport(context)
+                }
+            }
+        }
+    }
+
+    private fun runAssemblyAndExport(context: JobContext) {
+        try {
+            val outputDir = context.request.outputDir
+            if (context.videoSegments.isEmpty()) {
+                emitError(context.request.id, "validation", "No video segments to assemble", null)
+                return
+            }
+            val videoConcat = buildConcatList(outputDir, "video", context.videoSegments)
+            val audioConcat =
+                if (context.audioSegments.isNotEmpty()) {
+                    buildConcatList(outputDir, "audio", context.audioSegments)
+                } else {
+                    null
+                }
+            val outputFile = File(outputDir, "output_${context.request.id}.mp4")
+            val assembler = Mp4Assembler(FfmpegKitRunner())
+            val result =
+                assembler.assemble(
+                    MuxRequest(
+                        video = TrackInput(videoConcat.absolutePath, isConcatList = true),
+                        audio =
+                            audioConcat?.let {
+                                TrackInput(it.absolutePath, isConcatList = true)
+                            },
+                        outputPath = outputFile.absolutePath,
+                    ),
+                )
+            if (!result.success) {
+                stateStore.get(context.request.id)?.let { stateStore.save(it.copy(state = JobState.FAILED)) }
+                emitError(context.request.id, "ffmpeg", "Assembly failed", result.output)
+                return
+            }
+            val exportUri = exportToSaf(context.exportTreeUri ?: return, outputFile)
+            if (exportUri == null) {
+                stateStore.get(context.request.id)?.let { stateStore.save(it.copy(state = JobState.FAILED)) }
+                emitError(context.request.id, "storage", "Export failed", null)
+                return
+            }
+        } catch (e: Exception) {
+            stateStore.get(context.request.id)?.let { stateStore.save(it.copy(state = JobState.FAILED)) }
+            emitError(context.request.id, "ffmpeg", "Assembly/export error", e.message)
+        }
+    }
+
+    private fun buildConcatList(
+        outputDir: File,
+        trackId: String,
+        segments: List<Segment>,
+    ): File {
+        val listFile = File(outputDir, "concat_${trackId}.txt")
+        val segmentFiles = segments.map { File(outputDir, "segment_${it.fileKey}.bin") }
+        val initFile =
+            segments.firstOrNull { it.map != null }?.map?.let {
+                File(outputDir, "map_${it.fileKey}.bin")
+            }
+        return ConcatListWriter.write(listFile, segmentFiles, initFile)
+    }
+
+    private fun exportToSaf(
+        exportTreeUri: String,
+        sourceFile: File,
+    ): String? {
+        val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(
+            reactContext,
+            android.net.Uri.parse(exportTreeUri),
+        ) ?: return null
+        val displayName = sourceFile.name.removeSuffix(".mp4")
+        val target = tree.createFile("video/mp4", displayName) ?: return null
+        return try {
+            reactContext.contentResolver.openOutputStream(target.uri)?.use { output ->
+                sourceFile.inputStream().use { input ->
+                    input.copyTo(output)
+                }
+            } ?: return null
+            target.uri.toString()
+        } catch (e: IOException) {
+            null
+        }
+    }
+
+    private fun emitError(
+        jobId: String,
+        code: String,
+        message: String,
+        detail: String?,
+    ) {
+        val payload =
+            JSONObject()
+                .put("id", jobId)
+                .put("code", code)
+                .put("message", message)
+                .put("detail", detail)
+        sendEvent("downloadError", payload)
+    }
+
+    private fun segmentFileKey(
+        trackId: String,
+        sequence: Long,
+    ): String = "${trackId}_$sequence"
+
+    private fun mapFileKey(
+        trackId: String,
+        uri: String,
+    ): String = "${trackId}_${uri.hashCode()}"
+
     private fun computeProgress(state: DownloadJobState): JSONObject {
         val totalSegments = state.segments.size
         val completed = state.segments.count { it.status == SegmentStatus.COMPLETED }
@@ -349,6 +497,9 @@ class HlsDownloaderModule(
     private data class JobContext(
         val request: DownloadRequest,
         val segments: List<Segment>,
+        val videoSegments: List<Segment>,
+        val audioSegments: List<Segment>,
+        val exportTreeUri: String?,
         var downloader: JobDownloader? = null,
     )
 }

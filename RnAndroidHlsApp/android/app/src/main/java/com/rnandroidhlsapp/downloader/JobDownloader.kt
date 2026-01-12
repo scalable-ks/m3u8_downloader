@@ -18,6 +18,7 @@ class JobDownloader(
     private val stateStore: DownloadStateStore,
     private val progressListener: ProgressListener,
     private val errorListener: ErrorListener,
+    private val completionListener: CompletionListener? = null,
     private val retryPolicy: RetryPolicy = RetryPolicy.default(),
     private val maxParallel: Int = 3,
     private val segmentDownloader: SegmentDownloader? = null,
@@ -47,6 +48,7 @@ class JobDownloader(
         if (state != null) {
             stateStore.save(state.copy(state = JobState.CANCELED, updatedAt = System.currentTimeMillis()))
         }
+        completionListener?.onComplete(jobId, JobState.CANCELED)
     }
 
     fun start(
@@ -71,6 +73,7 @@ class JobDownloader(
                 "constraints",
                 constraintResult.reason ?: "Constraints not met",
             )
+            completionListener?.onComplete(request.id, JobState.FAILED)
             return
         }
         if (!ensureDiskSpace(request)) {
@@ -86,6 +89,7 @@ class JobDownloader(
                 )
             stateStore.save(failedState)
             errorListener.onError(request.id, "storage", "Insufficient disk space")
+            completionListener?.onComplete(request.id, JobState.FAILED)
             return
         }
 
@@ -95,6 +99,7 @@ class JobDownloader(
         stateStore.save(initialState)
         val semaphore = Semaphore(maxParallel)
         val downloader = segmentDownloader ?: SegmentDownloader(httpClient)
+        val mapCache = HashSet<String>()
 
         val jobs =
             segments.filterNot { isSegmentComplete(it, request.outputDir) }.map { segment ->
@@ -103,14 +108,38 @@ class JobDownloader(
                         if (isCanceled.get()) {
                             return@withPermit
                         }
-                        val partialFile = File(request.outputDir, "segment_${segment.sequence}.partial")
-                        val finalFile = File(request.outputDir, "segment_${segment.sequence}.bin")
+                        if (!ensureMapDownloaded(segment, request.id, request.outputDir, request.headers, downloader, mapCache)) {
+                            return@withPermit
+                        }
+                        val partialFile = File(request.outputDir, "segment_${segment.fileKey}.partial")
+                        val finalFile = File(request.outputDir, "segment_${segment.fileKey}.bin")
+                        val byteRange = segment.byteRange
+                        if (byteRange != null && resumeBytesFor(partialFile) >= byteRange.length) {
+                            if (partialFile.exists()) {
+                                partialFile.renameTo(finalFile)
+                            }
+                            val finalBytes = finalFile.takeIf { it.exists() }?.length() ?: byteRange.length
+                            stateStore.updateSegment(
+                                request.id,
+                                SegmentState(
+                                    uri = segment.uri,
+                                    sequence = segment.sequence,
+                                    fileKey = segment.fileKey,
+                                    status = SegmentStatus.COMPLETED,
+                                    bytesDownloaded = finalBytes,
+                                    totalBytes = finalBytes,
+                                ),
+                            )
+                            updateJobStateIfDone(request.id)
+                            return@withPermit
+                        }
                         if (finalFile.exists()) {
                             stateStore.updateSegment(
                                 request.id,
                                 SegmentState(
                                     uri = segment.uri,
                                     sequence = segment.sequence,
+                                    fileKey = segment.fileKey,
                                     status = SegmentStatus.COMPLETED,
                                     bytesDownloaded = finalFile.length(),
                                     totalBytes = finalFile.length(),
@@ -119,7 +148,7 @@ class JobDownloader(
                             updateJobStateIfDone(request.id)
                             return@withPermit
                         }
-                        var resumeBytes = partialFile.takeIf { it.exists() }?.length() ?: 0
+                        var resumeBytes = resumeBytesFor(partialFile)
                         var attempt = 0
                         var completed = false
                         while (!completed && !isCanceled.get()) {
@@ -130,6 +159,7 @@ class JobDownloader(
                                     SegmentState(
                                         uri = segment.uri,
                                         sequence = segment.sequence,
+                                        fileKey = segment.fileKey,
                                         status = SegmentStatus.DOWNLOADING,
                                         bytesDownloaded = resumeBytes,
                                     ),
@@ -150,6 +180,7 @@ class JobDownloader(
                                     SegmentState(
                                         uri = segment.uri,
                                         sequence = segment.sequence,
+                                        fileKey = segment.fileKey,
                                         status = SegmentStatus.COMPLETED,
                                         bytesDownloaded = total,
                                         totalBytes = total,
@@ -165,6 +196,7 @@ class JobDownloader(
                                         SegmentState(
                                             uri = segment.uri,
                                             sequence = segment.sequence,
+                                            fileKey = segment.fileKey,
                                             status = SegmentStatus.FAILED,
                                             bytesDownloaded = resumeBytes,
                                         ),
@@ -209,6 +241,9 @@ class JobDownloader(
             jobs.joinAll()
             updateJobStateIfDone(request.id)
             val state = stateStore.get(request.id)
+            if (state != null) {
+                completionListener?.onComplete(request.id, state.state)
+            }
             if (state?.state == JobState.COMPLETED && request.cleanupPolicy.deleteOnSuccess) {
                 cleanupFiles(request.outputDir, deleteCompleted = true)
             }
@@ -250,16 +285,17 @@ class JobDownloader(
     ): DownloadJobState {
         val createdAt = existingState?.createdAt ?: System.currentTimeMillis()
         val updatedAt = System.currentTimeMillis()
-        val existingBySequence = existingState?.segments?.associateBy { it.sequence }.orEmpty()
+        val existingBySequence = existingState?.segments?.associateBy { it.fileKey }.orEmpty()
         val updatedSegments =
             segments.map { segment ->
-                val existing = existingBySequence[segment.sequence]
+                val existing = existingBySequence[segment.fileKey]
                 if (existing != null && existing.status == SegmentStatus.COMPLETED) {
                     existing
                 } else {
                     SegmentState(
                         uri = segment.uri,
                         sequence = segment.sequence,
+                        fileKey = segment.fileKey,
                         status = SegmentStatus.PENDING,
                         bytesDownloaded = 0,
                     )
@@ -285,7 +321,7 @@ class JobDownloader(
         segment: Segment,
         outputDir: File,
     ): Boolean {
-        val finalFile = File(outputDir, "segment_${segment.sequence}.bin")
+        val finalFile = File(outputDir, "segment_${segment.fileKey}.bin")
         return finalFile.exists()
     }
 
@@ -298,6 +334,8 @@ class JobDownloader(
         if (deleteCompleted) {
             files.filter { it.name.startsWith("segment_") && it.name.endsWith(".bin") }
                 .forEach { it.delete() }
+            files.filter { it.name.startsWith("map_") && it.name.endsWith(".bin") }
+                .forEach { it.delete() }
         }
     }
 
@@ -305,6 +343,51 @@ class JobDownloader(
         isCanceled.set(true)
         if (request.cleanupPolicy.deleteOnFailure) {
             cleanupFiles(request.outputDir, deleteCompleted = true)
+        }
+    }
+
+    private fun resumeBytesFor(partialFile: File): Long {
+        return partialFile.takeIf { it.exists() }?.length() ?: 0
+    }
+
+    private fun ensureMapDownloaded(
+        segment: Segment,
+        jobId: String,
+        outputDir: File,
+        headers: Map<String, String>,
+        downloader: SegmentDownloader,
+        cache: MutableSet<String>,
+    ): Boolean {
+        val map = segment.map ?: return true
+        val key = map.fileKey
+        synchronized(cache) {
+            if (cache.contains(key)) {
+                return true
+            }
+            cache.add(key)
+        }
+        val partialFile = File(outputDir, "map_${map.fileKey}.partial")
+        val finalFile = File(outputDir, "map_${map.fileKey}.bin")
+        if (finalFile.exists()) {
+            return true
+        }
+        return try {
+            val mapSegment =
+                Segment(
+                    uri = map.uri,
+                    duration = 0.0,
+                    sequence = -1,
+                    fileKey = "map_${map.fileKey}",
+                    byteRange = map.byteRange,
+                )
+            downloader.downloadSegment(mapSegment, partialFile, headers, 0)
+            if (partialFile.exists()) {
+                partialFile.renameTo(finalFile)
+            }
+            true
+        } catch (e: Exception) {
+            errorListener.onError(jobId, "network", "Failed to download init segment", e.message)
+            false
         }
     }
 }

@@ -35,7 +35,13 @@ open class SegmentDownloader(
         }
         val requestBuilder = Request.Builder().url(segment.uri)
         headers.forEach { (key, value) -> requestBuilder.addHeader(key, value) }
-        if (effectiveResume > 0) {
+        val byteRange = segment.byteRange
+        if (byteRange != null) {
+            val offset = byteRange.offset ?: 0
+            val start = offset + effectiveResume
+            val end = offset + byteRange.length - 1
+            requestBuilder.addHeader("Range", "bytes=$start-$end")
+        } else if (effectiveResume > 0) {
             requestBuilder.addHeader("Range", "bytes=$effectiveResume-")
         }
         client.newCall(requestBuilder.build()).execute().use { response ->
