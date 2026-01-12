@@ -53,6 +53,7 @@ RnAndroidHlsApp/android/**/outputs/
 RnAndroidHlsApp/android/**/intermediates/
 RnAndroidHlsApp/android/**/tmp/
 RnAndroidHlsApp/android/app/libs/*.aar
+RnAndroidHlsApp/android/app/libs/*.version
 RnAndroidHlsApp/ios/Pods/
 RnAndroidHlsApp/ios/build/
 RnAndroidHlsApp/.bundle/

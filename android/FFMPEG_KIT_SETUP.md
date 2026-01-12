@@ -64,6 +64,14 @@ cp prebuilt/bundle-android-aar-lts/ffmpeg-kit-full-*.aar \
   /path/to/your/project/RnAndroidHlsApp/android/app/libs/ffmpeg-kit-full.aar
 ```
 
+Record the build metadata (manual copy):
+
+```bash
+echo "tag=v6.0.LTS" > /path/to/your/project/RnAndroidHlsApp/android/app/libs/ffmpeg-kit-full.version
+echo "source=https://github.com/arthenica/ffmpeg-kit.git" >> /path/to/your/project/RnAndroidHlsApp/android/app/libs/ffmpeg-kit-full.version
+echo "built_at=YYYY-MM-DDTHH:MM:SSZ" >> /path/to/your/project/RnAndroidHlsApp/android/app/libs/ffmpeg-kit-full.version
+```
+
 ### Helper Script (React Native)
 
 If you have the SDK/NDK installed, you can build and copy in one step:

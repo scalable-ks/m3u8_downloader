@@ -28,5 +28,10 @@ fi
 
 mkdir -p "$RN_ANDROID_DIR/libs"
 cp "$OUTPUT_FILE" "$RN_ANDROID_DIR/libs/ffmpeg-kit-full.aar"
+cat > "$RN_ANDROID_DIR/libs/ffmpeg-kit-full.version" <<EOF
+tag=$TAG
+source=$REPO_URL
+built_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
 echo "Saved ffmpeg-kit-full.aar to $RN_ANDROID_DIR/libs"
 popd >/dev/null
