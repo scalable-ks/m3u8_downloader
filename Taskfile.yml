@@ -33,6 +33,12 @@ tasks:
     cmds:
       - ./gradlew test
 
+  audit:deps:
+    desc: Run dependency audits (npm)
+    cmds:
+      - npm audit
+      - cd RnAndroidHlsApp && npm audit
+
   ffmpeg:fetch:
     desc: Download ffmpeg-kit AAR into android/libs (requires FFMPEG_KIT_AAR_URL)
     cmds:
@@ -47,7 +53,13 @@ tasks:
     desc: Run all lint and unit tests (fail fast)
     cmds:
       - task: lint:js
+      - task: audit:deps
       - task: test:js
       - task: lint:kt
       - task: test:kt
+
+  pipe:full:
+    desc: Run all lint and unit tests including RN app module (fail fast)
+    cmds:
+      - task: pipe
       - task: test:kt:app
