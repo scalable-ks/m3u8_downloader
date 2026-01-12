@@ -33,10 +33,15 @@ function App(): JSX.Element {
       });
       return;
     }
-    await manager.start({
+    const job = await manager.start({
       id: `job-${Date.now()}`,
       masterPlaylistUri: playlistUri,
       exportTreeUri: selectedFolder,
+    });
+    manager.handleProgress({
+      id: job.id,
+      state: job.state,
+      progress: job.progress,
     });
   };
 
