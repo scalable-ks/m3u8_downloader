@@ -10,6 +10,7 @@ export interface StartJobRequest {
   cookies?: CookieInput;
   constraints?: JobConstraints;
   cleanupPolicy?: CleanupPolicy;
+  exportTreeUri?: string;
 }
 
 export interface JobStatus {

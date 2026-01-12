@@ -15,6 +15,7 @@ export interface PlanOptions {
   cookies?: CookieInput;
   constraints?: DownloadPlan["constraints"];
   cleanupPolicy?: DownloadPlan["cleanupPolicy"];
+  exportTreeUri?: DownloadPlan["exportTreeUri"];
   fetcher?: (url: string, headers: Record<string, string>) => Promise<string>;
 }
 
@@ -98,5 +99,6 @@ export async function buildDownloadPlan(options: PlanOptions): Promise<DownloadP
     headers,
     constraints: options.constraints,
     cleanupPolicy: options.cleanupPolicy,
+    exportTreeUri: options.exportTreeUri,
   };
 }

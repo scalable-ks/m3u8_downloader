@@ -53,6 +53,7 @@ aseg2.aac
     cookies: { session: "abc" },
     constraints: { requiresUnmetered: true },
     cleanupPolicy: { deleteOnFailure: true },
+    exportTreeUri: "content://tree/primary%3ADownloads",
     fetcher,
   });
 
@@ -65,4 +66,5 @@ aseg2.aac
   assert.equal(requests[0].headers.Cookie, "session=abc");
   assert.equal(plan.constraints.requiresUnmetered, true);
   assert.equal(plan.cleanupPolicy.deleteOnFailure, true);
+  assert.equal(plan.exportTreeUri, "content://tree/primary%3ADownloads");
 });

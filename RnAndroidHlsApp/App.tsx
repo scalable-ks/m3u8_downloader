@@ -18,11 +18,25 @@ function App(): JSX.Element {
 
   const handleStart = async (playlistUri: string) => {
     if (!playlistUri) {
+      manager.handleError({
+        id: "ui",
+        code: "validation",
+        message: "Enter a playlist URL.",
+      });
+      return;
+    }
+    if (!selectedFolder) {
+      manager.handleError({
+        id: "ui",
+        code: "validation",
+        message: "Choose a save folder.",
+      });
       return;
     }
     await manager.start({
       id: `job-${Date.now()}`,
       masterPlaylistUri: playlistUri,
+      exportTreeUri: selectedFolder,
     });
   };
 

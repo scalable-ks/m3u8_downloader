@@ -29,4 +29,5 @@ export interface DownloadPlan {
   headers?: Record<string, string>;
   constraints?: JobConstraints;
   cleanupPolicy?: CleanupPolicy;
+  exportTreeUri?: string;
 }

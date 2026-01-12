@@ -15,12 +15,19 @@ export type ErrorListener = (error: JobError) => void;
 export class DownloadManager {
   private readonly progressListeners = new Set<ProgressListener>();
   private readonly errorListeners = new Set<ErrorListener>();
+  private readonly bridge: DownloaderBridge;
+  private readonly store: JobStore;
+  private readonly logger: Logger;
 
   constructor(
-    private readonly bridge: DownloaderBridge,
-    private readonly store: JobStore = new MemoryJobStore(),
-    private readonly logger: Logger = new ConsoleLogger(),
-  ) {}
+    bridge: DownloaderBridge,
+    store: JobStore = new MemoryJobStore(),
+    logger: Logger = new ConsoleLogger(),
+  ) {
+    this.bridge = bridge;
+    this.store = store;
+    this.logger = logger;
+  }
 
   async start(request: StartJobRequest): Promise<DownloadJob> {
     const job = await this.bridge.startJob(request);
@@ -37,6 +44,7 @@ export class DownloadManager {
       cookies: request.cookies,
       constraints: request.constraints,
       cleanupPolicy: request.cleanupPolicy,
+      exportTreeUri: request.exportTreeUri,
     });
     const job = await this.startPlannedJob(plan);
     this.logger.info("job planned", { id: job.id });
