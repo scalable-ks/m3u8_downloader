@@ -14,15 +14,29 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: RnAndroidHlsApp/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            RnAndroidHlsApp/package-lock.json
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "17"
       - uses: android-actions/setup-android@v3
-      - name: Install JS dependencies
+      - name: Install root JS dependencies
+        run: npm ci
+      - name: Install RN app JS dependencies
         working-directory: RnAndroidHlsApp
         run: npm ci
+      - name: Run lint, audits, and unit tests
+        run: ./bin/task pipe
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;27.1.12297006"
+      - name: Build ffmpeg-kit AAR
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+        run: |
+          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/27.1.12297006" >> "$GITHUB_ENV"
+          ./scripts/build_ffmpeg_kit_aar.sh
       - name: Build release APK
         working-directory: RnAndroidHlsApp/android
         run: ./gradlew assembleRelease

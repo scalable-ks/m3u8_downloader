@@ -181,3 +181,39 @@ Before committing tests:
 - [ ] Edge cases and error cases are included.
 - [ ] Bug regressions are documented (when applicable).
 - [ ] Tests pass with `npm test`.
+
+---
+
+## End-to-End Test (Manual)
+
+Run this before release builds:
+
+1) Use a known-good HLS URL (public or internal test fixture).
+2) Start a download from the app UI and confirm:
+   - Progress updates over time (not instant completion).
+   - Pausing/resuming works without losing progress.
+3) Let the job complete and confirm:
+   - MP4 output exists in the temp output directory.
+   - Export to SAF/SD succeeds and file is readable.
+4) Validate logs:
+   - Job start, segment progress, muxing start, muxing complete.
+   - No errors or retries that exceed the budget.
+
+Record the URL used and final output size in the release notes.
+
+---
+
+## Memory Profiling (Android)
+
+Goal: confirm the downloader stays within low-end device limits.
+
+Checklist:
+- [ ] Profile on a low-end device (1 GB RAM if possible).
+- [ ] Use Android Studio Profiler or:
+  `adb shell dumpsys meminfo <package>`
+- [ ] Start a medium-sized download (10-20 minutes).
+- [ ] Observe peak RAM during download and muxing.
+- [ ] Confirm memory returns to baseline after completion/cancel.
+- [ ] Confirm no large in-memory buffers (segments streamed to disk).
+
+Record peak memory and device model in the release notes.
