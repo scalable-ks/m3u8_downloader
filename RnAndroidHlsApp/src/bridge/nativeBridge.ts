@@ -1,0 +1,76 @@
+import { NativeEventEmitter, NativeModules, Platform } from "react-native";
+import type { DownloaderBridge, JobError, JobStatus, StartJobRequest } from "./api.ts";
+import type { DownloadPlan } from "./models.ts";
+
+const MODULE_NAME = "HlsDownloaderModule";
+
+interface NativeModuleShape {
+  startPlannedJob(planJson: string): Promise<JobStatus>;
+  pauseJob(id: string): Promise<JobStatus>;
+  resumeJob(id: string): Promise<JobStatus>;
+  cancelJob(id: string): Promise<JobStatus>;
+  getJobStatus(id: string): Promise<JobStatus>;
+}
+
+export class NativeDownloaderBridge implements DownloaderBridge {
+  private readonly nativeModule: NativeModuleShape;
+  private readonly emitter: NativeEventEmitter;
+
+  constructor(
+    onProgress: (status: JobStatus) => void,
+    onError: (error: JobError) => void,
+  ) {
+    const module = NativeModules[MODULE_NAME] as NativeModuleShape | undefined;
+    if (!module || Platform.OS !== "android") {
+      throw new Error("Native downloader module not available.");
+    }
+    this.nativeModule = module;
+    this.emitter = new NativeEventEmitter(module as never);
+    this.emitter.addListener("downloadProgress", (payload) => {
+      const data = typeof payload === "string" ? JSON.parse(payload) : payload;
+      onProgress({
+        id: data.id,
+        state: data.state,
+        progress: data.progress,
+      });
+    });
+    this.emitter.addListener("downloadError", (payload) => {
+      const data = typeof payload === "string" ? JSON.parse(payload) : payload;
+      onError({
+        id: data.id,
+        code: data.code,
+        message: data.message,
+        detail: data.detail,
+      });
+    });
+  }
+
+  async startJob(request: StartJobRequest) {
+    throw new Error("Use startPlannedJob for native downloads.");
+  }
+
+  async startPlannedJob(plan: DownloadPlan) {
+    const status = await this.nativeModule.startPlannedJob(JSON.stringify(plan));
+    return {
+      id: status.id,
+      state: status.state,
+      progress: status.progress,
+    };
+  }
+
+  pauseJob(id: string) {
+    return this.nativeModule.pauseJob(id);
+  }
+
+  resumeJob(id: string) {
+    return this.nativeModule.resumeJob(id);
+  }
+
+  cancelJob(id: string) {
+    return this.nativeModule.cancelJob(id);
+  }
+
+  getJobStatus(id: string) {
+    return this.nativeModule.getJobStatus(id);
+  }
+}

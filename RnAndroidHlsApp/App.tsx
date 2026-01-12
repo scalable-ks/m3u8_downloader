@@ -1,15 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar, StyleSheet } from "react-native";
 import { DownloadScreen } from "./src/ui/DownloadScreen.tsx";
 import { DownloadManager } from "./src/bridge/downloadManager.ts";
-import { MockBridge } from "./src/bridge/mockBridge.ts";
 import { pickDirectory } from "./src/bridge/saf.ts";
 import type { Logger } from "./src/bridge/logger.ts";
+import { NativeDownloaderBridge } from "./src/bridge/nativeBridge.ts";
 
 function App(): JSX.Element {
-  const bridge = useMemo(() => new MockBridge(), []);
   const [logs, setLogs] = useState<string[]>([]);
+  const [manager, setManager] = useState<DownloadManager | null>(null);
+  const managerRef = useRef<DownloadManager | null>(null);
   const logger = useMemo<Logger>(
     () => ({
       info(message, context) {
@@ -24,15 +25,22 @@ function App(): JSX.Element {
     }),
     [],
   );
-  const manager = useMemo(() => new DownloadManager(bridge, undefined, logger), [bridge, logger]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
 
   useEffect(() => {
-    bridge.setProgressEmitter((status) => manager.handleProgress(status));
-    bridge.setErrorEmitter((error) => manager.handleError(error));
-  }, [bridge, manager]);
+    const bridge = new NativeDownloaderBridge(
+      (status) => managerRef.current?.handleProgress(status),
+      (error) => managerRef.current?.handleError(error),
+    );
+    const managerInstance = new DownloadManager(bridge, undefined, logger);
+    managerRef.current = managerInstance;
+    setManager(managerInstance);
+  }, [logger]);
 
   const handleStart = async (playlistUri: string) => {
+    if (!manager) {
+      return;
+    }
     logger.info("start pressed");
     if (!playlistUri) {
       manager.handleError({
@@ -51,15 +59,10 @@ function App(): JSX.Element {
       return;
     }
     logger.info("start job", { playlistUri, exportTreeUri: selectedFolder });
-    const job = await manager.start({
+    await manager.startPlanned({
       id: `job-${Date.now()}`,
       masterPlaylistUri: playlistUri,
       exportTreeUri: selectedFolder,
-    });
-    manager.handleProgress({
-      id: job.id,
-      state: job.state,
-      progress: job.progress,
     });
   };
 
@@ -76,13 +79,15 @@ function App(): JSX.Element {
     <SafeAreaProvider>
       <StatusBar barStyle="dark-content" />
       <SafeAreaView style={styles.container}>
-        <DownloadScreen
-          manager={manager}
-          onStart={handleStart}
-          onPickFolder={handlePickFolder}
-          selectedFolder={selectedFolder}
-          logs={logs}
-        />
+        {manager ? (
+          <DownloadScreen
+            manager={manager}
+            onStart={handleStart}
+            onPickFolder={handlePickFolder}
+            selectedFolder={selectedFolder}
+            logs={logs}
+          />
+        ) : null}
       </SafeAreaView>
     </SafeAreaProvider>
   );
