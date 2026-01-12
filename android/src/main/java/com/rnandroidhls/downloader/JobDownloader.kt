@@ -141,6 +141,12 @@ class JobDownloader(
                                         request.headers,
                                         resumeBytes,
                                     )
+                                if (isCanceled.get()) {
+                                    if (request.cleanupPolicy.deleteOnCancel || request.cleanupPolicy.deleteOnFailure) {
+                                        partialFile.delete()
+                                    }
+                                    return@withPermit
+                                }
                                 resumeBytes = total
                                 if (partialFile.exists()) {
                                     partialFile.renameTo(finalFile)
