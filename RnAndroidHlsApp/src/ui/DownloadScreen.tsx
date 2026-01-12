@@ -81,8 +81,18 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
         </View>
         {lastError ? <Text style={styles.error}>{lastError.message}</Text> : null}
         <Animated.View style={[styles.startButtonWrapper, { transform: [{ scale: pulse }] }]}>
-          <Pressable style={styles.startButton} onPress={() => props.onStart(playlistUri.trim())}>
-            <Text style={styles.startButtonText}>START DOWNLOAD</Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.startButton,
+              pressed ? styles.startButtonPressed : null,
+            ]}
+            onPress={() => props.onStart(playlistUri.trim())}
+          >
+            {({ pressed }) => (
+              <Text style={[styles.startButtonText, pressed ? styles.startButtonTextPressed : null]}>
+                START DOWNLOAD
+              </Text>
+            )}
           </Pressable>
         </Animated.View>
       </View>
@@ -280,12 +290,23 @@ const styles = StyleSheet.create({
     borderBottomColor: "#4b4b4b",
     alignItems: "center",
   },
+  startButtonPressed: {
+    backgroundColor: "#ff76dd",
+    borderTopColor: "#4b4b4b",
+    borderLeftColor: "#4b4b4b",
+    borderRightColor: "#ffffff",
+    borderBottomColor: "#ffffff",
+    transform: [{ translateY: 1 }],
+  },
   startButtonText: {
     color: "#ffffff",
     fontWeight: "700",
     fontSize: 16,
     letterSpacing: 1,
     fontFamily: "monospace",
+  },
+  startButtonTextPressed: {
+    color: "#1f2937",
   },
   card: {
     padding: 12,
