@@ -1,10 +1,11 @@
 import { parseMasterPlaylist } from "../domain/m3u8.ts";
-import { parseMediaPlaylist } from "../domain/media.ts";
+import { mergeLivePlaylist, nextReloadDelayMs, parseMediaPlaylist } from "../domain/media.ts";
 import { selectTracks } from "../domain/selection.ts";
 import type { MasterPlaylist } from "../domain/types.ts";
 import type { DownloadPlan, TrackPlan } from "./models.ts";
 
 const COOKIE_SEPARATOR = "; ";
+const DEFAULT_LIVE_REFRESH_LIMIT = 5;
 
 export type CookieInput = string | Record<string, string>;
 
@@ -17,6 +18,8 @@ export interface PlanOptions {
   cleanupPolicy?: DownloadPlan["cleanupPolicy"];
   exportTreeUri?: DownloadPlan["exportTreeUri"];
   fetcher?: (url: string, headers: Record<string, string>) => Promise<string>;
+  sleep?: (ms: number) => Promise<void>;
+  liveRefreshLimit?: number;
 }
 
 function mergeHeaders(
@@ -55,14 +58,6 @@ async function fetchPlaylist(
   return fetchText(url, headers);
 }
 
-function buildTrackPlan(playlistUri: string, content: string): TrackPlan {
-  const playlist = parseMediaPlaylist(content, playlistUri);
-  return {
-    playlistUri,
-    segments: playlist.segments,
-  };
-}
-
 function loadMaster(content: string, uri: string): MasterPlaylist {
   return parseMasterPlaylist(content, uri);
 }
@@ -74,18 +69,25 @@ export async function buildDownloadPlan(options: PlanOptions): Promise<DownloadP
   const tracks = selectTracks(master);
 
   const videoContent = await fetchPlaylist(tracks.video.uri, headers, options.fetcher);
-  const video = buildTrackPlan(tracks.video.uri, videoContent);
+  const video = await buildTrackPlanWithLiveRefresh(tracks.video.uri, videoContent, headers, options);
 
   const audio =
     tracks.audio?.uri
-      ? buildTrackPlan(tracks.audio.uri, await fetchPlaylist(tracks.audio.uri, headers, options.fetcher))
+      ? await buildTrackPlanWithLiveRefresh(
+          tracks.audio.uri,
+          await fetchPlaylist(tracks.audio.uri, headers, options.fetcher),
+          headers,
+          options,
+        )
       : undefined;
 
   const subtitles =
     tracks.subtitle?.uri
-      ? buildTrackPlan(
+      ? await buildTrackPlanWithLiveRefresh(
           tracks.subtitle.uri,
           await fetchPlaylist(tracks.subtitle.uri, headers, options.fetcher),
+          headers,
+          options,
         )
       : undefined;
 
@@ -100,5 +102,30 @@ export async function buildDownloadPlan(options: PlanOptions): Promise<DownloadP
     constraints: options.constraints,
     cleanupPolicy: options.cleanupPolicy,
     exportTreeUri: options.exportTreeUri,
+  };
+}
+
+async function buildTrackPlanWithLiveRefresh(
+  playlistUri: string,
+  content: string,
+  headers: Record<string, string>,
+  options: PlanOptions,
+): Promise<TrackPlan> {
+  let playlist = parseMediaPlaylist(content, playlistUri);
+  if (playlist.isLive) {
+    const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+    const limit = options.liveRefreshLimit ?? DEFAULT_LIVE_REFRESH_LIMIT;
+    let refreshes = 0;
+    while (playlist.isLive && refreshes < limit) {
+      await sleep(nextReloadDelayMs(playlist));
+      const refreshedContent = await fetchPlaylist(playlistUri, headers, options.fetcher);
+      const refreshed = parseMediaPlaylist(refreshedContent, playlistUri);
+      playlist = mergeLivePlaylist(playlist, refreshed);
+      refreshes += 1;
+    }
+  }
+  return {
+    playlistUri,
+    segments: playlist.segments,
   };
 }

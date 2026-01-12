@@ -23,6 +23,7 @@ video.m3u8
 seg1.ts
 #EXTINF:4.0,
 seg2.ts
+#EXT-X-ENDLIST
 `,
     ],
     [
@@ -32,6 +33,7 @@ seg2.ts
 aseg1.aac
 #EXTINF:4.0,
 aseg2.aac
+#EXT-X-ENDLIST
 `,
     ],
   ]);
@@ -68,3 +70,42 @@ aseg2.aac
   assert.equal(plan.cleanupPolicy.deleteOnFailure, true);
   assert.equal(plan.exportTreeUri, "content://tree/primary%3ADownloads");
 });
+
+test("buildDownloadPlan refreshes live playlists up to limit", async () => {
+  // ARRANGE
+  const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nvideo.m3u8";
+  const initialVideo =
+    "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:1\n#EXTINF:2,\nseg1.ts";
+  const updatedVideo =
+    "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:2\n#EXTINF:2,\nseg2.ts\n#EXT-X-ENDLIST";
+  const fetcher = createSequencedFetcher({
+    "https://example.com/master.m3u8": [master],
+    "https://example.com/video.m3u8": [initialVideo, updatedVideo],
+  });
+
+  // ACT
+  const plan = await buildDownloadPlan({
+    id: "job-live",
+    masterPlaylistUri: "https://example.com/master.m3u8",
+    fetcher,
+    sleep: async () => {},
+    liveRefreshLimit: 2,
+  });
+
+  // ASSERT
+  assert.equal(plan.video.segments.length, 1);
+  assert.equal(plan.video.segments[0].uri, "https://example.com/seg2.ts");
+});
+
+function createSequencedFetcher(map) {
+  const counters = new Map();
+  return async (url) => {
+    const entries = map[url];
+    if (!entries) {
+      throw new Error(`Missing fixture for ${url}`);
+    }
+    const index = counters.get(url) ?? 0;
+    counters.set(url, index + 1);
+    return entries[Math.min(index, entries.length - 1)];
+  };
+}
