@@ -18,6 +18,14 @@ function formatProgress(job: DownloadJob): string {
   return `${job.progress.bytesDownloaded}${totalText}`;
 }
 
+function progressRatio(job: DownloadJob): number {
+  const total = job.progress.totalBytes ?? 0;
+  if (total <= 0) {
+    return 0;
+  }
+  return Math.min(job.progress.bytesDownloaded / total, 1);
+}
+
 export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
   const { jobs, lastError, pause, resume, cancel } = useDownloadJobs(props.manager);
   const pulse = useRef(new Animated.Value(1)).current;
@@ -77,6 +85,14 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
           </Pressable>
         </Animated.View>
       </View>
+      {lastError ? (
+        <View style={styles.errorWindow}>
+          <View style={styles.errorTitleBar}>
+            <Text style={styles.errorTitleText}>ERROR.LOG</Text>
+          </View>
+          <Text style={styles.errorText}>{lastError.message}</Text>
+        </View>
+      ) : null}
       <FlatList
         data={listData}
         keyExtractor={(item) => item.id}
@@ -87,6 +103,10 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
               <Text style={styles.statusChip}>{item.state.toUpperCase()}</Text>
             </View>
             <Text style={styles.jobMeta}>PROGRESS {formatProgress(item)}</Text>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${progressRatio(item) * 100}%` }]} />
+              <View style={styles.progressScanline} />
+            </View>
             <View style={styles.actions}>
               <Pressable style={styles.action} onPress={() => pause(item.id)}>
                 <Text style={styles.actionText}>PAUSE</Text>
@@ -147,6 +167,28 @@ const styles = StyleSheet.create({
   error: {
     color: "#ff005d",
     marginBottom: 8,
+    fontFamily: "monospace",
+  },
+  errorWindow: {
+    borderWidth: 2,
+    borderColor: "#000000",
+    backgroundColor: "#ffe4f4",
+    padding: 8,
+    marginBottom: 12,
+  },
+  errorTitleBar: {
+    backgroundColor: "#b91c1c",
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    marginBottom: 6,
+  },
+  errorTitleText: {
+    color: "#ffffff",
+    fontFamily: "monospace",
+    fontSize: 12,
+  },
+  errorText: {
+    color: "#7f1d1d",
     fontFamily: "monospace",
   },
   label: {
@@ -245,6 +287,30 @@ const styles = StyleSheet.create({
     color: "#1f2937",
     fontFamily: "monospace",
     marginBottom: 6,
+  },
+  progressTrack: {
+    height: 14,
+    borderWidth: 2,
+    borderTopColor: "#ffffff",
+    borderLeftColor: "#ffffff",
+    borderRightColor: "#4b4b4b",
+    borderBottomColor: "#4b4b4b",
+    backgroundColor: "#0a0a0a",
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#00ff85",
+  },
+  progressScanline: {
+    position: "absolute",
+    right: 4,
+    top: 2,
+    bottom: 2,
+    width: 2,
+    backgroundColor: "#ffffff",
+    opacity: 0.6,
   },
   actions: {
     flexDirection: "row",
