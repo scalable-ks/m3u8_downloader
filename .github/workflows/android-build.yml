@@ -43,7 +43,9 @@ jobs:
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
         run: |
-          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/27.1.12297006" >> "$GITHUB_ENV"
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/27.1.12297006"
+          export ANDROID_NDK_HOME="${ANDROID_NDK_ROOT}"
+          export PATH="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:${PATH}"
           chmod +x ./scripts/build_ffmpeg_kit_aar.sh
           ./scripts/build_ffmpeg_kit_aar.sh
       - name: Build release APK
