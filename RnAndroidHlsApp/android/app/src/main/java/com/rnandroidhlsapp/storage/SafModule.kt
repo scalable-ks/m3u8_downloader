@@ -22,7 +22,7 @@ class SafModule(
 
     @ReactMethod
     fun pickDirectory(promise: Promise) {
-        val activity = currentActivity
+        val activity = reactContext.currentActivity
         if (activity == null) {
             promise.reject("NO_ACTIVITY", "No current Activity")
             return
@@ -43,7 +43,7 @@ class SafModule(
     }
 
     override fun onActivityResult(
-        activity: Activity?,
+        activity: Activity,
         requestCode: Int,
         resultCode: Int,
         data: Intent?,
@@ -77,7 +77,7 @@ class SafModule(
         promise.resolve(uri.toString())
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         // No-op
     }
 
