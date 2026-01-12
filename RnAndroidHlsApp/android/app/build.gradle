@@ -105,6 +105,11 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+    testOptions {
+        unitTests.all {
+            useJUnitPlatform()
+        }
+    }
 }
 
 dependencies {
@@ -121,4 +126,7 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }

@@ -2,6 +2,7 @@ version: "3"
 
 vars:
   ANDROID_DIR: android
+  RN_ANDROID_DIR: RnAndroidHlsApp/android
 
 tasks:
   lint:js:
@@ -26,6 +27,12 @@ tasks:
     cmds:
       - ./gradlew test
 
+  test:kt:app:
+    desc: Run Kotlin unit tests for RN app module
+    dir: "{{.RN_ANDROID_DIR}}"
+    cmds:
+      - ./gradlew test
+
   ffmpeg:fetch:
     desc: Download ffmpeg-kit AAR into android/libs (requires FFMPEG_KIT_AAR_URL)
     cmds:
@@ -38,3 +45,4 @@ tasks:
       - task: test:js
       - task: lint:kt
       - task: test:kt
+      - task: test:kt:app
