@@ -33,6 +33,11 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
   const [playlistUri, setPlaylistUri] = useState(props.defaultUri ?? "");
   const [headersInput, setHeadersInput] = useState("");
   const [cookiesInput, setCookiesInput] = useState("");
+  const latestCompleted = useMemo(() => {
+    return jobs
+      .filter((job) => job.state === "completed")
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+  }, [jobs]);
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -124,6 +129,14 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
             <Text style={styles.errorTitleText}>ERROR.LOG</Text>
           </View>
           <Text style={styles.errorText}>{lastError.message}</Text>
+        </View>
+      ) : null}
+      {latestCompleted ? (
+        <View style={styles.successWindow}>
+          <View style={styles.successTitleBar}>
+            <Text style={styles.successTitleText}>SUCCESS.LOG</Text>
+          </View>
+          <Text style={styles.successText}>Job {latestCompleted.id} completed.</Text>
         </View>
       ) : null}
       <View style={styles.logWindow}>
@@ -222,6 +235,28 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffe4f4",
     padding: 8,
     marginBottom: 12,
+  },
+  successWindow: {
+    borderWidth: 2,
+    borderColor: "#000000",
+    backgroundColor: "#dcfce7",
+    padding: 8,
+    marginBottom: 12,
+  },
+  successTitleBar: {
+    backgroundColor: "#15803d",
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    marginBottom: 6,
+  },
+  successTitleText: {
+    color: "#ffffff",
+    fontFamily: "monospace",
+    fontSize: 12,
+  },
+  successText: {
+    color: "#14532d",
+    fontFamily: "monospace",
   },
   errorTitleBar: {
     backgroundColor: "#b91c1c",
