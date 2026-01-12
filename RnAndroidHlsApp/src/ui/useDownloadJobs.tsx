@@ -31,11 +31,24 @@ export function useDownloadJobs(manager: DownloadManager): UseDownloadJobsResult
 
   useEffect(() => {
     const unsubscribeProgress = manager.onProgress((status) => {
-      setJobs((current) =>
-        current.map((job) =>
+      setJobs((current) => {
+        const existing = current.find((job) => job.id === status.id);
+        if (!existing) {
+          return [
+            ...current,
+            {
+              id: status.id,
+              masterPlaylistUri: "",
+              createdAt: Date.now(),
+              state: status.state,
+              progress: status.progress,
+            },
+          ];
+        }
+        return current.map((job) =>
           job.id === status.id ? { ...job, state: status.state, progress: status.progress } : job,
-        ),
-      );
+        );
+      });
     });
     const unsubscribeError = manager.onError((error) => {
       setLastError(error);
