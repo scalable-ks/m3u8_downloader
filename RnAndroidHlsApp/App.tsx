@@ -5,10 +5,26 @@ import { DownloadScreen } from "./src/ui/DownloadScreen.tsx";
 import { DownloadManager } from "./src/bridge/downloadManager.ts";
 import { MockBridge } from "./src/bridge/mockBridge.ts";
 import { pickDirectory } from "./src/bridge/saf.ts";
+import type { Logger } from "./src/bridge/logger.ts";
 
 function App(): JSX.Element {
   const bridge = useMemo(() => new MockBridge(), []);
-  const manager = useMemo(() => new DownloadManager(bridge), [bridge]);
+  const [logs, setLogs] = useState<string[]>([]);
+  const logger = useMemo<Logger>(
+    () => ({
+      info(message, context) {
+        setLogs((current) => [`INFO ${message}`, ...current].slice(0, 12));
+      },
+      warn(message, context) {
+        setLogs((current) => [`WARN ${message}`, ...current].slice(0, 12));
+      },
+      error(message, context) {
+        setLogs((current) => [`ERROR ${message}`, ...current].slice(0, 12));
+      },
+    }),
+    [],
+  );
+  const manager = useMemo(() => new DownloadManager(bridge, undefined, logger), [bridge, logger]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,6 +77,7 @@ function App(): JSX.Element {
           onStart={handleStart}
           onPickFolder={handlePickFolder}
           selectedFolder={selectedFolder}
+          logs={logs}
         />
       </SafeAreaView>
     </SafeAreaProvider>

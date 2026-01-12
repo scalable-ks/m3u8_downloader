@@ -10,6 +10,7 @@ interface DownloadScreenProps {
   onPickFolder: () => Promise<void>;
   selectedFolder?: string | null;
   defaultUri?: string;
+  logs: string[];
 }
 
 function formatProgress(job: DownloadJob): string {
@@ -93,6 +94,20 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
           <Text style={styles.errorText}>{lastError.message}</Text>
         </View>
       ) : null}
+      <View style={styles.logWindow}>
+        <View style={styles.logTitleBar}>
+          <Text style={styles.logTitleText}>CONSOLE.TXT</Text>
+        </View>
+        {props.logs.length === 0 ? (
+          <Text style={styles.logLine}>No logs yet.</Text>
+        ) : (
+          props.logs.map((line, index) => (
+            <Text key={`${index}-${line}`} style={styles.logLine}>
+              {line}
+            </Text>
+          ))
+        )}
+      </View>
       <FlatList
         data={listData}
         keyExtractor={(item) => item.id}
@@ -190,6 +205,29 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#7f1d1d",
     fontFamily: "monospace",
+  },
+  logWindow: {
+    borderWidth: 2,
+    borderColor: "#000000",
+    backgroundColor: "#eef2ff",
+    padding: 8,
+    marginBottom: 12,
+  },
+  logTitleBar: {
+    backgroundColor: "#4338ca",
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    marginBottom: 6,
+  },
+  logTitleText: {
+    color: "#ffffff",
+    fontFamily: "monospace",
+    fontSize: 12,
+  },
+  logLine: {
+    color: "#1e1b4b",
+    fontFamily: "monospace",
+    fontSize: 12,
   },
   label: {
     fontFamily: "monospace",
