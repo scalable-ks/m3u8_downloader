@@ -95,6 +95,7 @@ class JobDownloader(
         stateStore.save(initialState)
         val semaphore = Semaphore(maxParallel)
         val downloader = segmentDownloader ?: SegmentDownloader(httpClient)
+        val failureCleanupDone = AtomicBoolean(false)
 
         val jobs =
             segments.filterNot { isSegmentComplete(it, request.outputDir) }.map { segment ->
@@ -205,6 +206,12 @@ class JobDownloader(
                 delay(1_000)
                 updateJobStateIfDone(request.id)
                 val state = stateStore.get(request.id) ?: return@launch
+                if (state.state == JobState.FAILED &&
+                    request.cleanupPolicy.deleteOnFailure &&
+                    failureCleanupDone.compareAndSet(false, true)
+                ) {
+                    cleanupFiles(request.outputDir, deleteCompleted = true)
+                }
                 if (state.state == JobState.COMPLETED || state.state == JobState.FAILED) {
                     return@launch
                 }
@@ -216,6 +223,12 @@ class JobDownloader(
             updateJobStateIfDone(request.id)
             val state = stateStore.get(request.id)
             if (state?.state == JobState.COMPLETED && request.cleanupPolicy.deleteOnSuccess) {
+                cleanupFiles(request.outputDir, deleteCompleted = true)
+            }
+            if (state?.state == JobState.FAILED &&
+                request.cleanupPolicy.deleteOnFailure &&
+                failureCleanupDone.compareAndSet(false, true)
+            ) {
                 cleanupFiles(request.outputDir, deleteCompleted = true)
             }
         }
