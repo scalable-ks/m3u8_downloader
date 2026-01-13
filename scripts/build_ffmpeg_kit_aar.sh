@@ -43,7 +43,7 @@ OUTPUT_FILE=""
 declare -a AAR_CANDIDATES=()
 while IFS= read -r -d '' candidate; do
   AAR_CANDIDATES+=("$candidate")
-done < <(find prebuilt -type f -name "ffmpeg-kit-full-*.aar" -print0 2>/dev/null)
+done < <(find prebuilt -type f \( -name "ffmpeg-kit-full-*.aar" -o -name "ffmpeg-kit.aar" \) -print0 2>/dev/null)
 
 if [[ ${#AAR_CANDIDATES[@]} -gt 0 ]]; then
   IFS=$'\n' AAR_CANDIDATES=($(printf '%s\n' "${AAR_CANDIDATES[@]}" | sort))
