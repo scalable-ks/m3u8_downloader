@@ -178,6 +178,7 @@ class JobDownloader(
                                     )
                                     val failures = failureCount.incrementAndGet()
                                     if (failures >= maxFailures) {
+                                        stopDownloadsOnFailure(request, failureCleanupDone)
                                         stateStore.save(
                                             stateStore.get(request.id)?.copy(
                                                 state = JobState.FAILED,
@@ -185,12 +186,11 @@ class JobDownloader(
                                             ) ?: return@withPermit,
                                         )
                                         errorListener.onError(request.id, "network", "Failure budget exceeded")
-                                        stopDownloadsOnFailure(request)
                                         return@withPermit
                                     }
+                                    stopDownloadsOnFailure(request, failureCleanupDone)
                                     updateJobStateIfDone(request.id)
                                     errorListener.onError(request.id, "network", e.message ?: "download failed")
-                                    stopDownloadsOnFailure(request)
                                     return@withPermit
                                 }
                                 delay(retryPolicy.nextDelayMs(attempt))
@@ -320,9 +320,12 @@ class JobDownloader(
         }
     }
 
-    private fun stopDownloadsOnFailure(request: DownloadRequest) {
+    private fun stopDownloadsOnFailure(
+        request: DownloadRequest,
+        cleanupGuard: AtomicBoolean,
+    ) {
         isCanceled.set(true)
-        if (request.cleanupPolicy.deleteOnFailure) {
+        if (request.cleanupPolicy.deleteOnFailure && cleanupGuard.compareAndSet(false, true)) {
             cleanupFiles(request.outputDir, deleteCompleted = true)
         }
     }
