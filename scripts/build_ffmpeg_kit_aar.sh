@@ -17,7 +17,7 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 git clone --depth 1 --branch "$TAG" "$REPO_URL" "$WORK_DIR/ffmpeg-kit"
 pushd "$WORK_DIR/ffmpeg-kit" >/dev/null
-if ! ./android.sh --disable-lib-cpu-features; then
+if ! ./android.sh --disable-lib-cpu-features --disable-arm-v7a --disable-arm-v7a-neon; then
   if [[ -f "$WORK_DIR/ffmpeg-kit/build.log" ]]; then
     cp "$WORK_DIR/ffmpeg-kit/build.log" "$ROOT_DIR/ffmpeg-kit-build.log" || true
   fi
