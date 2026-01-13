@@ -17,6 +17,15 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 git clone --depth 1 --branch "$TAG" "$REPO_URL" "$WORK_DIR/ffmpeg-kit"
 pushd "$WORK_DIR/ffmpeg-kit" >/dev/null
+# CMake in the runner no longer accepts < 3.5, but cpu-features uses 2.8.
+# Force a minimum policy version to keep the build working.
+CMAKE_POLICY_VERSION_MINIMUM="${CMAKE_POLICY_VERSION_MINIMUM:-3.5}"
+export CMAKE_POLICY_VERSION_MINIMUM
+if [[ -n "${CMAKE_ARGS:-}" ]]; then
+  export CMAKE_ARGS="${CMAKE_ARGS} -DCMAKE_POLICY_VERSION_MINIMUM=${CMAKE_POLICY_VERSION_MINIMUM}"
+else
+  export CMAKE_ARGS="-DCMAKE_POLICY_VERSION_MINIMUM=${CMAKE_POLICY_VERSION_MINIMUM}"
+fi
 if ! ./android.sh --disable-arm-v7a --disable-arm-v7a-neon; then
   if [[ -f "$WORK_DIR/ffmpeg-kit/build.log" ]]; then
     cp "$WORK_DIR/ffmpeg-kit/build.log" "$ROOT_DIR/ffmpeg-kit-build.log" || true
