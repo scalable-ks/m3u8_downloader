@@ -25,6 +25,8 @@ jobs:
         with:
           go-version: "1.22"
       - uses: android-actions/setup-android@v3
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null
       - name: Install root JS dependencies
         run: npm ci
       - name: Install RN app JS dependencies
