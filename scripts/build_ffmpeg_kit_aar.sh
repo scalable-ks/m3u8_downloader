@@ -39,10 +39,31 @@ if ! ./android.sh --lts --disable-arm-v7a --disable-arm-v7a-neon --disable-x86; 
   exit 1
 fi
 
-OUTPUT_GLOB="prebuilt/bundle-android-aar-lts/ffmpeg-kit-full-*.aar"
-OUTPUT_FILE="$(ls $OUTPUT_GLOB 2>/dev/null | head -n 1 || true)"
+OUTPUT_FILE=""
+declare -a AAR_CANDIDATES=()
+while IFS= read -r -d '' candidate; do
+  AAR_CANDIDATES+=("$candidate")
+done < <(find prebuilt -type f -name "ffmpeg-kit-full-*.aar" -print0 2>/dev/null)
+
+if [[ ${#AAR_CANDIDATES[@]} -gt 0 ]]; then
+  IFS=$'\n' AAR_CANDIDATES=($(printf '%s\n' "${AAR_CANDIDATES[@]}" | sort))
+  unset IFS
+fi
+
+for candidate in "${AAR_CANDIDATES[@]}"; do
+  if [[ "$candidate" == *"bundle-android-aar-lts"* || "$candidate" == *"lts"* ]]; then
+    OUTPUT_FILE="$candidate"
+    break
+  fi
+done
+
+if [[ -z "$OUTPUT_FILE" && ${#AAR_CANDIDATES[@]} -gt 0 ]]; then
+  OUTPUT_FILE="${AAR_CANDIDATES[0]}"
+fi
+
 if [[ -z "$OUTPUT_FILE" ]]; then
-  echo "FFmpegKit AAR not found at $OUTPUT_GLOB"
+  echo "FFmpegKit AAR not found under prebuilt/"
+  find prebuilt -maxdepth 4 -type f -name "*.aar" -print 2>/dev/null || true
   exit 1
 fi
 
