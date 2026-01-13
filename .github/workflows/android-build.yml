@@ -38,12 +38,12 @@ jobs:
       - name: Run lint, audits, and unit tests
         run: task pipe
       - name: Install Android NDK
-        run: sdkmanager --install "ndk;27.1.12297006"
+        run: sdkmanager --install "ndk;21.4.7075529"
       - name: Build ffmpeg-kit AAR
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
         run: |
-          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/27.1.12297006"
+          export ANDROID_NDK_ROOT="${ANDROID_SDK_ROOT}/ndk/21.4.7075529"
           export ANDROID_NDK_HOME="${ANDROID_NDK_ROOT}"
           export PATH="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:${PATH}"
           chmod +x ./scripts/build_ffmpeg_kit_aar.sh
