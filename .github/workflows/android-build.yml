@@ -35,7 +35,21 @@ jobs:
         run: |
           export ANDROID_NDK_ROOT="$ANDROID_SDK_ROOT/ndk/25.2.9519653"
           export ANDROID_SDK_ROOT="$ANDROID_SDK_ROOT"
+          export ANDROID_NDK_HOME="$ANDROID_NDK_ROOT"
+          export NDK_ROOT="$ANDROID_NDK_ROOT"
           bash scripts/build_ffmpeg_kit_aar.sh
+      - name: Show ffmpeg-kit build log
+        if: failure()
+        run: |
+          if [ -f ffmpeg-kit-build.log ]; then
+            tail -n 200 ffmpeg-kit-build.log
+          fi
+      - name: Upload ffmpeg-kit build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-kit-build-log
+          path: ffmpeg-kit-build.log
       - name: Install root JS dependencies
         run: npm ci
       - name: Install RN app JS dependencies
