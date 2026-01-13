@@ -18,6 +18,11 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 git clone --depth 1 --branch "$TAG" "$REPO_URL" "$WORK_DIR/ffmpeg-kit"
 pushd "$WORK_DIR/ffmpeg-kit" >/dev/null
 sed -i 's/ENABLED_LIBRARIES\[LIBRARY_CPU_FEATURES\]=1/ENABLED_LIBRARIES[LIBRARY_CPU_FEATURES]=0/' scripts/function-android.sh
+cat > scripts/android/cpu-features.sh <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+chmod +x scripts/android/cpu-features.sh
 if ! ./android.sh --disable-lib-cpu-features --disable-arm-v7a --disable-arm-v7a-neon; then
   if [[ -f "$WORK_DIR/ffmpeg-kit/build.log" ]]; then
     cp "$WORK_DIR/ffmpeg-kit/build.log" "$ROOT_DIR/ffmpeg-kit-build.log" || true
