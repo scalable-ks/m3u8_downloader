@@ -17,7 +17,12 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 
 git clone --depth 1 --branch "$TAG" "$REPO_URL" "$WORK_DIR/ffmpeg-kit"
 pushd "$WORK_DIR/ffmpeg-kit" >/dev/null
-./android.sh
+if ! ./android.sh --disable-lib-cpu-features; then
+  if [[ -f "$WORK_DIR/ffmpeg-kit/build.log" ]]; then
+    cp "$WORK_DIR/ffmpeg-kit/build.log" "$ROOT_DIR/ffmpeg-kit-build.log" || true
+  fi
+  exit 1
+fi
 
 OUTPUT_GLOB="prebuilt/bundle-android-aar-lts/ffmpeg-kit-full-*.aar"
 OUTPUT_FILE="$(ls $OUTPUT_GLOB 2>/dev/null | head -n 1 || true)"
