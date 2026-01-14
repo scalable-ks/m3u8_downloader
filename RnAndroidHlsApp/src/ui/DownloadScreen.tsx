@@ -31,8 +31,6 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
   const { jobs, lastError, pause, resume, cancel } = useDownloadJobs(props.manager);
   const pulse = useRef(new Animated.Value(1)).current;
   const [playlistUri, setPlaylistUri] = useState(props.defaultUri ?? "");
-  const [headersInput, setHeadersInput] = useState("");
-  const [cookiesInput, setCookiesInput] = useState("");
   const latestCompleted = useMemo(() => {
     return jobs
       .filter((job) => job.state === "completed")
@@ -86,26 +84,6 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
             <Text style={styles.actionText}>CHOOSE</Text>
           </Pressable>
         </View>
-        <Text style={styles.label}>HEADERS (JSON)</Text>
-        <TextInput
-          value={headersInput}
-          onChangeText={setHeadersInput}
-          placeholder='{"Authorization":"Bearer ..."}'
-          style={styles.input}
-          placeholderTextColor="#6b7280"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Text style={styles.label}>COOKIES (JSON or raw)</Text>
-        <TextInput
-          value={cookiesInput}
-          onChangeText={setCookiesInput}
-          placeholder='{"session":"abc"} or session=abc'
-          style={styles.input}
-          placeholderTextColor="#6b7280"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
         {lastError ? <Text style={styles.error}>{lastError.message}</Text> : null}
         <Animated.View style={[styles.startButtonWrapper, { transform: [{ scale: pulse }] }]}>
           <Pressable
@@ -113,7 +91,7 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
               styles.startButton,
               pressed ? styles.startButtonPressed : null,
             ]}
-            onPress={() => props.onStart(playlistUri.trim(), headersInput, cookiesInput)}
+            onPress={() => props.onStart(playlistUri.trim(), "", "")}
           >
             {({ pressed }) => (
               <Text style={[styles.startButtonText, pressed ? styles.startButtonTextPressed : null]}>
