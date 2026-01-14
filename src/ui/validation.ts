@@ -7,7 +7,18 @@
 export function validatePlaylistUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
+    const isValid = parsed.protocol === "http:" || parsed.protocol === "https:";
+
+    // Security warning for HTTP (not HTTPS)
+    if (isValid && parsed.protocol === "http:") {
+      console.warn(
+        "SECURITY WARNING: Using HTTP (not HTTPS) for playlist URL. " +
+          "HTTP connections are vulnerable to man-in-the-middle attacks, credential interception, " +
+          "and content tampering. Consider using HTTPS for secure streaming.",
+      );
+    }
+
+    return isValid;
   } catch {
     return false;
   }

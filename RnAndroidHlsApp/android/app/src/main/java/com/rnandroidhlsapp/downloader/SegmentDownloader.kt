@@ -1,6 +1,8 @@
 package com.rnandroidhlsapp.downloader
 
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.buffer
@@ -36,13 +38,20 @@ open class SegmentDownloader(
         private const val MAX_KEY_CACHE_SIZE = 100
     }
 
+    /**
+     * Downloads a segment to the destination file.
+     *
+     * IMPORTANT: This is a suspend function that explicitly uses Dispatchers.IO
+     * for all blocking operations (network, file I/O). This ensures blocking
+     * operations never run on compute-bound dispatcher threads.
+     */
     @Throws(IOException::class)
-    open fun downloadSegment(
+    open suspend fun downloadSegment(
         segment: Segment,
         destination: File,
         headers: Map<String, String>,
         resumeBytes: Long,
-    ): Long {
+    ): Long = withContext(Dispatchers.IO) {
         val isEncrypted = segment.key?.method == "AES-128" && segment.key.uri != null
         val effectiveResume = if (isEncrypted) 0 else resumeBytes
         if (isEncrypted && resumeBytes > 0 && destination.exists()) {
@@ -59,7 +68,7 @@ open class SegmentDownloader(
         } else if (effectiveResume > 0) {
             requestBuilder.addHeader("Range", "bytes=$effectiveResume-")
         }
-        client.newCall(requestBuilder.build()).execute().use { response ->
+        return@withContext client.newCall(requestBuilder.build()).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IOException("HTTP ${response.code}")
             }
@@ -72,14 +81,15 @@ open class SegmentDownloader(
                         out.writeAll(stream.source().buffer())
                     }
                 }
-                return destination.length()
-            }
-            body.source().use { source ->
-                sink.use {
-                    it.writeAll(source)
+                destination.length()
+            } else {
+                body.source().use { source ->
+                    sink.use {
+                        it.writeAll(source)
+                    }
                 }
+                effectiveResume + body.contentLength().coerceAtLeast(0)
             }
-            return (effectiveResume + body.contentLength().coerceAtLeast(0))
         }
     }
 

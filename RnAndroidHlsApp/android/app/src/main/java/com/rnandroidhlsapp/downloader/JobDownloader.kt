@@ -42,12 +42,6 @@ class JobDownloader(
     private val isCanceled = AtomicBoolean(false)
     private val failureCount = AtomicInteger(0)
 
-    private val httpClient =
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .build()
-
     /**
      * Safely launches a coroutine in the job scope, logging if scope is null.
      * Returns null if the scope is not available (e.g., after cancellation).
@@ -165,7 +159,7 @@ class JobDownloader(
             buildInitialState(request, segments, existingState)
         stateStore.save(initialState)
         val semaphore = Semaphore(maxParallel)
-        val downloader = segmentDownloader ?: SegmentDownloader(httpClient)
+        val downloader = segmentDownloader ?: SegmentDownloader(HttpClientFactory.getSharedClient())
         val mapCache = HashSet<String>()
 
         val jobs =
@@ -322,10 +316,32 @@ class JobDownloader(
                 }
             }
 
+        // Launch disk space monitoring as separate job
+        val diskSpaceMonitorJob =
+            launchInJobScope {
+                while (isActive && !isCanceled.get()) {
+                    delay(60_000) // Check every minute
+                    if (!ensureDiskSpace(request)) {
+                        Log.e(
+                            "JobDownloader",
+                            "Insufficient disk space during download for job ${request.id}, cancelling",
+                        )
+                        errorListener.onError(
+                            request.id,
+                            "storage",
+                            "Insufficient disk space during download",
+                        )
+                        cancel(request.id, request.outputDir, request.cleanupPolicy)
+                        return@launch
+                    }
+                }
+            }
+
         // Await all downloads and handle result
         return@withContext try {
             jobs.joinAll()
             progressJob?.cancel()
+            diskSpaceMonitorJob?.cancel()
             updateJobStateIfDone(request.id)
             val finalState = stateStore.get(request.id)
 
@@ -346,11 +362,13 @@ class JobDownloader(
         } catch (e: CancellationException) {
             Log.i("JobDownloader", "Download cancelled for job ${request.id}")
             progressJob?.cancel()
+            diskSpaceMonitorJob?.cancel()
             cleanup()
             DownloadResult.Cancelled
         } catch (e: Exception) {
             Log.e("JobDownloader", "Download failed for job ${request.id}", e)
             progressJob?.cancel()
+            diskSpaceMonitorJob?.cancel()
             cleanup()
             DownloadResult.Failure
         }

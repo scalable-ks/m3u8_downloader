@@ -76,6 +76,15 @@ fun validateSegment(segment: Segment): Boolean {
             Log.e("SegmentValidation", "Invalid URI scheme: ${uri.scheme} for segment ${segment.sequence}")
             return false
         }
+        // Security warning for HTTP (not HTTPS)
+        if (uri.scheme == "http") {
+            Log.w(
+                "SegmentValidation",
+                "SECURITY WARNING: Using HTTP (not HTTPS) for segment ${segment.sequence}. " +
+                    "HTTP connections are vulnerable to man-in-the-middle attacks and credential interception. " +
+                    "URI: ${segment.uri}",
+            )
+        }
     } catch (e: Exception) {
         Log.e("SegmentValidation", "Malformed URI: ${segment.uri} for segment ${segment.sequence}", e)
         return false
@@ -113,6 +122,15 @@ fun validateSegment(segment: Segment): Boolean {
             if (mapUri.scheme !in setOf("http", "https")) {
                 Log.e("SegmentValidation", "Invalid map URI scheme: ${mapUri.scheme}")
                 return false
+            }
+            // Security warning for HTTP (not HTTPS)
+            if (mapUri.scheme == "http") {
+                Log.w(
+                    "SegmentValidation",
+                    "SECURITY WARNING: Using HTTP (not HTTPS) for map segment. " +
+                        "HTTP connections are vulnerable to man-in-the-middle attacks. " +
+                        "URI: ${map.uri}",
+                )
             }
         } catch (e: Exception) {
             Log.e("SegmentValidation", "Malformed map URI: ${map.uri}", e)
