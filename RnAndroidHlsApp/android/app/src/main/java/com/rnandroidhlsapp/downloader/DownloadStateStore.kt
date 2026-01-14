@@ -34,6 +34,9 @@ class FileDownloadStateStore(
     private var lastFlushTime = System.currentTimeMillis()
     private val flushIntervalMs = 5000L // Flush every 5 seconds
     private val maxPendingUpdates = 10 // Or when 10 updates accumulate
+    private val flushLock = Any()
+    @Volatile
+    private var isFlushInProgress = false
 
     override fun get(jobId: String): DownloadJobState? {
         val file = stateFile(jobId)
@@ -126,8 +129,13 @@ class FileDownloadStateStore(
             pendingUpdates.size >= maxPendingUpdates ||
                 (System.currentTimeMillis() - lastFlushTime) >= flushIntervalMs
 
-        if (shouldFlush) {
-            flushPendingUpdates()
+        // Double-checked locking to prevent concurrent flushes
+        if (shouldFlush && !isFlushInProgress) {
+            synchronized(flushLock) {
+                if (!isFlushInProgress) {
+                    flushPendingUpdates()
+                }
+            }
         }
     }
 
@@ -135,36 +143,41 @@ class FileDownloadStateStore(
     private fun flushPendingUpdates() {
         if (pendingUpdates.isEmpty()) return
 
-        val startTime = System.currentTimeMillis()
-        val updates = pendingUpdates.toMap()
-        pendingUpdates.clear()
-        lastFlushTime = System.currentTimeMillis()
+        isFlushInProgress = true
+        try {
+            val startTime = System.currentTimeMillis()
+            val updates = pendingUpdates.toMap()
+            pendingUpdates.clear()
+            lastFlushTime = System.currentTimeMillis()
 
-        // Group updates by jobId
-        val updatesByJob = updates.entries.groupBy { it.key.substringBefore(":") }
+            // Group updates by jobId
+            val updatesByJob = updates.entries.groupBy { it.key.substringBefore(":") }
 
-        updatesByJob.forEach { (jobId, segmentEntries) ->
-            val existing = get(jobId) ?: return@forEach
+            updatesByJob.forEach { (jobId, segmentEntries) ->
+                val existing = get(jobId) ?: return@forEach
 
-            val updatedSegments =
-                existing.segments.map { existingSegment ->
-                    // Check if this segment has a pending update
-                    val updateKey = "$jobId:${existingSegment.fileKey}"
-                    updates[updateKey] ?: existingSegment
-                }
+                val updatedSegments =
+                    existing.segments.map { existingSegment ->
+                        // Check if this segment has a pending update
+                        val updateKey = "$jobId:${existingSegment.fileKey}"
+                        updates[updateKey] ?: existingSegment
+                    }
 
-            val updated =
-                existing.copy(
-                    segments = updatedSegments,
-                    updatedAt = System.currentTimeMillis(),
-                )
+                val updated =
+                    existing.copy(
+                        segments = updatedSegments,
+                        updatedAt = System.currentTimeMillis(),
+                    )
 
-            val file = stateFile(jobId)
-            file.writeText(encodeState(updated).toString())
+                val file = stateFile(jobId)
+                file.writeText(encodeState(updated).toString())
+            }
+
+            val duration = System.currentTimeMillis() - startTime
+            Log.d("StateStore", "Flushed ${updates.size} segment updates for ${updatesByJob.size} jobs in ${duration}ms")
+        } finally {
+            isFlushInProgress = false
         }
-
-        val duration = System.currentTimeMillis() - startTime
-        Log.d("StateStore", "Flushed ${updates.size} segment updates for ${updatesByJob.size} jobs in ${duration}ms")
     }
 
     @Synchronized

@@ -48,6 +48,18 @@ class JobDownloader(
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
 
+    /**
+     * Safely launches a coroutine in the job scope, logging if scope is null.
+     * Returns null if the scope is not available (e.g., after cancellation).
+     */
+    private fun launchInJobScope(block: suspend CoroutineScope.() -> Unit): Job? {
+        return jobScope?.launch(block = block).also {
+            if (it == null) {
+                Log.w("JobDownloader", "Attempted to launch coroutine on null scope")
+            }
+        }
+    }
+
     fun cancel(
         jobId: String,
         outputDir: File,
@@ -126,6 +138,28 @@ class JobDownloader(
             return@withContext DownloadResult.Failure
         }
 
+        // Validate all segments before processing
+        val invalidSegment = segments.firstOrNull { !validateSegment(it) }
+        if (invalidSegment != null) {
+            val failedState =
+                DownloadJobState(
+                    id = request.id,
+                    playlistUri = request.playlistUri,
+                    playlistMetadata = request.playlistMetadata,
+                    state = JobState.FAILED,
+                    segments = emptyList(),
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    lastErrorCode = "validation",
+                    lastErrorMessage = "Invalid segment data detected",
+                )
+            stateStore.save(failedState)
+            errorListener.onError(request.id, "validation", "Invalid segment: ${invalidSegment.uri}")
+            completionListener?.onComplete(request.id, JobState.FAILED)
+            cleanup()
+            return@withContext DownloadResult.Failure
+        }
+
         val existingState = stateStore.get(request.id)
         val initialState =
             buildInitialState(request, segments, existingState)
@@ -135,8 +169,8 @@ class JobDownloader(
         val mapCache = HashSet<String>()
 
         val jobs =
-            segments.filterNot { isSegmentComplete(it, request.outputDir) }.map { segment ->
-                jobScope!!.launch {
+            segments.filterNot { isSegmentComplete(it, request.outputDir) }.mapNotNull { segment ->
+                launchInJobScope {
                     semaphore.withPermit {
                         if (isCanceled.get()) {
                             return@withPermit
@@ -149,7 +183,11 @@ class JobDownloader(
                         val byteRange = segment.byteRange
                         if (byteRange != null && resumeBytesFor(partialFile) >= byteRange.length) {
                             if (partialFile.exists()) {
-                                partialFile.renameTo(finalFile)
+                                val renamed = partialFile.renameTo(finalFile)
+                                if (!renamed) {
+                                    Log.e("JobDownloader", "Failed to rename partial file to final: ${partialFile.absolutePath} -> ${finalFile.absolutePath}")
+                                    throw java.io.IOException("Failed to rename segment file")
+                                }
                             }
                             val finalBytes = finalFile.takeIf { it.exists() }?.length() ?: byteRange.length
                             stateStore.updateSegment(
@@ -206,7 +244,11 @@ class JobDownloader(
                                     )
                                 resumeBytes = total
                                 if (partialFile.exists()) {
-                                    partialFile.renameTo(finalFile)
+                                    val renamed = partialFile.renameTo(finalFile)
+                                    if (!renamed) {
+                                        Log.e("JobDownloader", "Failed to rename downloaded segment: ${partialFile.absolutePath} -> ${finalFile.absolutePath}")
+                                        throw java.io.IOException("Failed to rename downloaded segment")
+                                    }
                                 }
                                 stateStore.updateSegment(
                                     request.id,
@@ -268,7 +310,7 @@ class JobDownloader(
 
         // Launch progress monitoring as separate job
         val progressJob =
-            jobScope!!.launch {
+            launchInJobScope {
                 while (isActive && !isCanceled.get()) {
                     publishProgress(request.id)
                     delay(1_000)
@@ -283,7 +325,7 @@ class JobDownloader(
         // Await all downloads and handle result
         return@withContext try {
             jobs.joinAll()
-            progressJob.cancel()
+            progressJob?.cancel()
             updateJobStateIfDone(request.id)
             val finalState = stateStore.get(request.id)
 
@@ -303,12 +345,12 @@ class JobDownloader(
             }
         } catch (e: CancellationException) {
             Log.i("JobDownloader", "Download cancelled for job ${request.id}")
-            progressJob.cancel()
+            progressJob?.cancel()
             cleanup()
             DownloadResult.Cancelled
         } catch (e: Exception) {
             Log.e("JobDownloader", "Download failed for job ${request.id}", e)
-            progressJob.cancel()
+            progressJob?.cancel()
             cleanup()
             DownloadResult.Failure
         }
@@ -421,12 +463,27 @@ class JobDownloader(
         deleteCompleted: Boolean,
     ) {
         val files = outputDir.listFiles() ?: return
-        files.filter { it.name.endsWith(".partial") }.forEach { it.delete() }
+        files.filter { it.name.endsWith(".partial") }.forEach { file ->
+            val deleted = file.delete()
+            if (!deleted && file.exists()) {
+                Log.w("JobDownloader", "Failed to delete partial file: ${file.absolutePath}")
+            }
+        }
         if (deleteCompleted) {
             files.filter { it.name.startsWith("segment_") && it.name.endsWith(".bin") }
-                .forEach { it.delete() }
+                .forEach { file ->
+                    val deleted = file.delete()
+                    if (!deleted && file.exists()) {
+                        Log.w("JobDownloader", "Failed to delete segment file: ${file.absolutePath}")
+                    }
+                }
             files.filter { it.name.startsWith("map_") && it.name.endsWith(".bin") }
-                .forEach { it.delete() }
+                .forEach { file ->
+                    val deleted = file.delete()
+                    if (!deleted && file.exists()) {
+                        Log.w("JobDownloader", "Failed to delete map file: ${file.absolutePath}")
+                    }
+                }
         }
     }
 
@@ -473,7 +530,11 @@ class JobDownloader(
                 )
             downloader.downloadSegment(mapSegment, partialFile, headers, 0)
             if (partialFile.exists()) {
-                partialFile.renameTo(finalFile)
+                val renamed = partialFile.renameTo(finalFile)
+                if (!renamed) {
+                    Log.e("JobDownloader", "Failed to rename map segment: ${partialFile.absolutePath} -> ${finalFile.absolutePath}")
+                    throw java.io.IOException("Failed to rename map segment")
+                }
             }
             true
         } catch (e: Exception) {

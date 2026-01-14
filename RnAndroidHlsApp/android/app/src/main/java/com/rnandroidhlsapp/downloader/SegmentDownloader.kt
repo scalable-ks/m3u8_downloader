@@ -1,5 +1,6 @@
 package com.rnandroidhlsapp.downloader
 
+import android.util.Log
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.buffer
@@ -19,8 +20,21 @@ import javax.crypto.spec.SecretKeySpec
 open class SegmentDownloader(
     private val client: OkHttpClient,
 ) {
-    private val keyCache = ConcurrentHashMap<String, ByteArray>()
+    // LRU cache for decryption keys with max size of 100 entries
+    private val keyCache = object : LinkedHashMap<String, ByteArray>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?): Boolean {
+            val shouldRemove = size > MAX_KEY_CACHE_SIZE
+            if (shouldRemove && eldest != null) {
+                Log.d("SegmentDownloader", "Evicting key from cache: ${eldest.key}, cache size: $size")
+            }
+            return shouldRemove
+        }
+    }
     private val keyFetchLocks = ConcurrentHashMap<String, Any>()
+
+    companion object {
+        private const val MAX_KEY_CACHE_SIZE = 100
+    }
 
     @Throws(IOException::class)
     open fun downloadSegment(
@@ -92,12 +106,16 @@ open class SegmentDownloader(
         return CipherInputStream(input, cipher)
     }
 
+    @Synchronized
     private fun fetchKeyBytes(
         uri: String,
         headers: Map<String, String>,
     ): ByteArray {
-        // Fast path: check cache without locking
-        keyCache[uri]?.let { return it }
+        // Check cache first (synchronized method ensures thread-safe access to LinkedHashMap)
+        keyCache[uri]?.let {
+            Log.d("SegmentDownloader", "Key cache hit: $uri, cache size: ${keyCache.size}")
+            return it
+        }
 
         // Get or create lock object for this URI
         val lock = keyFetchLocks.computeIfAbsent(uri) { Any() }
@@ -117,6 +135,7 @@ open class SegmentDownloader(
                 response.body?.bytes() ?: throw IOException("Empty key body")
             }
             keyCache[uri] = bytes
+            Log.d("SegmentDownloader", "Key cached: $uri, cache size: ${keyCache.size}")
             return bytes
         }
     }

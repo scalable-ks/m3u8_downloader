@@ -1,6 +1,8 @@
 package com.rnandroidhlsapp.downloader
 
+import android.util.Log
 import java.io.File
+import java.net.URI
 
 enum class JobState {
     QUEUED,
@@ -37,6 +39,89 @@ data class Segment(
     val key: SegmentKey? = null,
     val map: SegmentMap? = null,
 )
+
+/**
+ * Validates that a segment has safe values for byte ranges, file keys, and URIs.
+ *
+ * @param segment The segment to validate
+ * @return true if valid, false if validation fails
+ */
+fun validateSegment(segment: Segment): Boolean {
+    // Validate byte range
+    if (segment.byteRange != null) {
+        val length = segment.byteRange.length
+        val offset = segment.byteRange.offset
+
+        if (length < 0) {
+            Log.e("SegmentValidation", "Invalid byte range length: $length for segment ${segment.sequence}")
+            return false
+        }
+
+        if (offset != null && offset < 0) {
+            Log.e("SegmentValidation", "Invalid byte range offset: $offset for segment ${segment.sequence}")
+            return false
+        }
+    }
+
+    // Validate file key (prevent path traversal)
+    if (segment.fileKey.contains("..") || segment.fileKey.startsWith("/")) {
+        Log.e("SegmentValidation", "Invalid file key (path traversal attempt): ${segment.fileKey}")
+        return false
+    }
+
+    // Validate URI
+    try {
+        val uri = URI(segment.uri)
+        if (uri.scheme !in setOf("http", "https")) {
+            Log.e("SegmentValidation", "Invalid URI scheme: ${uri.scheme} for segment ${segment.sequence}")
+            return false
+        }
+    } catch (e: Exception) {
+        Log.e("SegmentValidation", "Malformed URI: ${segment.uri} for segment ${segment.sequence}", e)
+        return false
+    }
+
+    // Validate map segment if present
+    if (segment.map != null) {
+        val map = segment.map
+
+        // Validate map byte range
+        if (map.byteRange != null) {
+            val length = map.byteRange.length
+            val offset = map.byteRange.offset
+
+            if (length < 0) {
+                Log.e("SegmentValidation", "Invalid map byte range length: $length")
+                return false
+            }
+
+            if (offset != null && offset < 0) {
+                Log.e("SegmentValidation", "Invalid map byte range offset: $offset")
+                return false
+            }
+        }
+
+        // Validate map file key
+        if (map.fileKey.contains("..") || map.fileKey.startsWith("/")) {
+            Log.e("SegmentValidation", "Invalid map file key (path traversal attempt): ${map.fileKey}")
+            return false
+        }
+
+        // Validate map URI
+        try {
+            val mapUri = URI(map.uri)
+            if (mapUri.scheme !in setOf("http", "https")) {
+                Log.e("SegmentValidation", "Invalid map URI scheme: ${mapUri.scheme}")
+                return false
+            }
+        } catch (e: Exception) {
+            Log.e("SegmentValidation", "Malformed map URI: ${map.uri}", e)
+            return false
+        }
+    }
+
+    return true
+}
 
 data class SegmentState(
     val uri: String,

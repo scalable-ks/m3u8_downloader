@@ -51,7 +51,11 @@ class HlsDownloadWorker(
                     progress: JobProgress,
                 ) {
                     val total = progress.totalBytes ?: 0
-                    val percent = if (total > 0) ((progress.bytesDownloaded * 100) / total).toInt() else 0
+                    val percent = if (total > 0) {
+                        (progress.bytesDownloaded.toDouble() / total * 100).toInt().coerceIn(0, 100)
+                    } else {
+                        0
+                    }
                     val info = createForegroundInfo(jobId, percent, progress)
                     setForegroundAsync(info)
                 }
@@ -230,8 +234,13 @@ class HlsDownloadWorker(
                             }
                             output.write(buffer, 0, bytesRead)
                             copiedBytes += bytesRead
-                            // TODO: Report progress via notification
-                            // Can add: setForegroundAsync(createExportProgressInfo(copiedBytes, totalSize))
+                            // Progress reporting: export phase shows in notification
+                            val exportPercent = if (totalSize > 0) {
+                                (copiedBytes.toDouble() / totalSize * 100).toInt().coerceIn(0, 100)
+                            } else {
+                                0
+                            }
+                            setForegroundAsync(createForegroundInfo(jobId, exportPercent, null))
                         }
                     }
                 } ?: return@withContext false
