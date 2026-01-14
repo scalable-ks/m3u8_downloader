@@ -5,7 +5,7 @@ import type { MasterPlaylist } from "../domain/types.ts";
 import type { DownloadPlan, TrackPlan } from "./models.ts";
 
 const COOKIE_SEPARATOR = "; ";
-const DEFAULT_LIVE_REFRESH_LIMIT = 5;
+const DEFAULT_MAX_LIVE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 export type CookieInput = string | Record<string, string>;
 
@@ -19,7 +19,8 @@ export interface PlanOptions {
   exportTreeUri?: DownloadPlan["exportTreeUri"];
   fetcher?: (url: string, headers: Record<string, string>) => Promise<string>;
   sleep?: (ms: number) => Promise<void>;
-  liveRefreshLimit?: number;
+  maxLiveDurationMs?: number;
+  signal?: AbortSignal;
 }
 
 function mergeHeaders(
@@ -113,18 +114,43 @@ async function buildTrackPlanWithLiveRefresh(
   options: PlanOptions,
 ): Promise<TrackPlan> {
   let playlist = parseMediaPlaylist(content, playlistUri);
+
   if (playlist.isLive) {
     const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
-    const limit = options.liveRefreshLimit ?? DEFAULT_LIVE_REFRESH_LIMIT;
+    const maxDurationMs = options.maxLiveDurationMs ?? DEFAULT_MAX_LIVE_DURATION_MS;
+    const startTime = Date.now();
     let refreshes = 0;
-    while (playlist.isLive && refreshes < limit) {
-      await sleep(nextReloadDelayMs(playlist));
-      const refreshedContent = await fetchPlaylist(playlistUri, headers, options.fetcher);
-      const refreshed = parseMediaPlaylist(refreshedContent, playlistUri);
-      playlist = mergeLivePlaylist(playlist, refreshed);
-      refreshes += 1;
+
+    while (playlist.isLive) {
+      // Check max duration safety limit
+      if (Date.now() - startTime > maxDurationMs) {
+        console.warn(`Live stream polling stopped after ${refreshes} refreshes (max duration reached)`);
+        break;
+      }
+
+      // Check for cancellation (if signal provided)
+      if (options.signal?.aborted) {
+        throw new Error("Live stream polling cancelled");
+      }
+
+      const delayMs = nextReloadDelayMs(playlist);
+      await sleep(delayMs);
+
+      try {
+        const refreshedContent = await fetchPlaylist(playlistUri, headers, options.fetcher);
+        const refreshed = parseMediaPlaylist(refreshedContent, playlistUri);
+        playlist = mergeLivePlaylist(playlist, refreshed);
+        refreshes += 1;
+      } catch (error) {
+        console.error(`Error fetching live playlist (attempt ${refreshes}):`, error);
+        // Implement exponential backoff on error
+        await sleep(Math.min(delayMs * 2, 30000));
+      }
     }
+
+    console.log(`Live stream completed after ${refreshes} refreshes`);
   }
+
   return {
     playlistUri,
     segments: playlist.segments,

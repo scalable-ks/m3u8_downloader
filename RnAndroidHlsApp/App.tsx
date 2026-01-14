@@ -9,6 +9,15 @@ import { NativeDownloaderBridge } from "./src/bridge/nativeBridge.ts";
 import { NativeJobStore } from "./src/bridge/nativeJobStore.ts";
 import { parseCookiesInput, parseHeadersInput } from "./src/ui/auth.ts";
 
+function validatePlaylistUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function App(): JSX.Element {
   const [logs, setLogs] = useState<string[]>([]);
   const [manager, setManager] = useState<DownloadManager | null>(null);
@@ -53,6 +62,14 @@ function App(): JSX.Element {
       });
       return;
     }
+    if (!validatePlaylistUrl(playlistUri)) {
+      manager.handleError({
+        id: "ui",
+        code: "validation",
+        message: "Invalid URL. Must be http or https.",
+      });
+      return;
+    }
     if (!selectedFolder) {
       manager.handleError({
         id: "ui",
@@ -75,13 +92,22 @@ function App(): JSX.Element {
       return;
     }
     logger.info("start job", { playlistUri, exportTreeUri: selectedFolder });
-    await manager.startPlanned({
-      id: `job-${Date.now()}`,
-      masterPlaylistUri: playlistUri,
-      exportTreeUri: selectedFolder,
-      headers,
-      cookies,
-    });
+    try {
+      await manager.startPlanned({
+        id: `job-${Date.now()}`,
+        masterPlaylistUri: playlistUri,
+        exportTreeUri: selectedFolder,
+        headers,
+        cookies,
+      });
+    } catch (error) {
+      logger.error("Failed to start download", { error });
+      manager.handleError({
+        id: "ui",
+        code: "start_failed",
+        message: error instanceof Error ? error.message : "Failed to start download",
+      });
+    }
   };
 
   const handlePickFolder = async () => {
