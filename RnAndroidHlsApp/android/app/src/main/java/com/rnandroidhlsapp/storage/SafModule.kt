@@ -8,6 +8,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.UiThreadUtil
 
 class SafModule(
     private val reactContext: ReactApplicationContext,
@@ -27,6 +28,10 @@ class SafModule(
             promise.reject("NO_ACTIVITY", "No current Activity")
             return
         }
+        if (activity.isFinishing || activity.isDestroyed) {
+            promise.reject("NO_ACTIVITY", "Activity is not in a usable state")
+            return
+        }
         if (pendingPromise != null) {
             promise.reject("IN_PROGRESS", "Another picker is active")
             return
@@ -39,7 +44,9 @@ class SafModule(
                     Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
             )
         }
-        activity.startActivityForResult(intent, REQUEST_CODE)
+        UiThreadUtil.runOnUiThread {
+            activity.startActivityForResult(intent, REQUEST_CODE)
+        }
     }
 
     override fun onActivityResult(

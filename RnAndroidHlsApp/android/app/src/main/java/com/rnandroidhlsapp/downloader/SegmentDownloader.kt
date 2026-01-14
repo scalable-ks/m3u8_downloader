@@ -20,6 +20,7 @@ open class SegmentDownloader(
     private val client: OkHttpClient,
 ) {
     private val keyCache = ConcurrentHashMap<String, ByteArray>()
+    private val keyFetchLocks = ConcurrentHashMap<String, Any>()
 
     @Throws(IOException::class)
     open fun downloadSegment(
@@ -95,17 +96,28 @@ open class SegmentDownloader(
         uri: String,
         headers: Map<String, String>,
     ): ByteArray {
-        return keyCache[uri] ?: run {
+        // Fast path: check cache without locking
+        keyCache[uri]?.let { return it }
+
+        // Get or create lock object for this URI
+        val lock = keyFetchLocks.computeIfAbsent(uri) { Any() }
+
+        // Double-checked locking with synchronized
+        synchronized(lock) {
+            // Check again after acquiring lock
+            keyCache[uri]?.let { return it }
+
+            // Only one thread reaches here per unique URI
             val requestBuilder = Request.Builder().url(uri)
             headers.forEach { (key, value) -> requestBuilder.addHeader(key, value) }
-            client.newCall(requestBuilder.build()).execute().use { response ->
+            val bytes = client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
                     throw IOException("Key HTTP ${response.code}")
                 }
-                val bytes = response.body?.bytes() ?: throw IOException("Empty key body")
-                keyCache[uri] = bytes
-                bytes
+                response.body?.bytes() ?: throw IOException("Empty key body")
             }
+            keyCache[uri] = bytes
+            return bytes
         }
     }
 

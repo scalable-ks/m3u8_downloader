@@ -19,11 +19,21 @@ export function useDownloadJobs(manager: DownloadManager): UseDownloadJobsResult
 
   useEffect(() => {
     let mounted = true;
-    manager.listJobs().then((items) => {
-      if (mounted) {
-        setJobs(items);
-      }
-    });
+    manager.listJobs()
+      .then((items) => {
+        if (mounted) {
+          setJobs(items);
+        }
+      })
+      .catch((error) => {
+        if (mounted) {
+          setLastError({
+            id: "system",
+            code: "LIST_FAILED",
+            message: error.message || "Failed to load jobs",
+          });
+        }
+      });
     return () => {
       mounted = false;
     };
