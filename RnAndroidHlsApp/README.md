@@ -86,6 +86,48 @@ You've successfully run and modified your React Native App. :partying_face:
 
 If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
 
+# Usage
+
+## Downloading HLS Streams
+
+The app requires only two inputs:
+1. **Playlist URL** - The master m3u8 playlist URL
+2. **Save Folder** - Where to save the downloaded MP4 file
+
+### Authentication
+
+Modern HLS services typically embed authentication directly in the URL:
+
+```
+✅ Signed URLs with tokens:
+https://cdn.example.com/playlist.m3u8?token=abc123&signature=xyz789
+
+✅ Path-based authentication:
+https://cdn.example.com/auth/abc123/playlist.m3u8
+
+✅ CloudFront signed URLs:
+https://example.cloudfront.net/playlist.m3u8?Policy=...&Signature=...&Key-Pair-Id=...
+```
+
+**No separate headers or cookies needed** - just paste the complete URL from your browser or service.
+
+### Supported Features
+
+- ✅ Downloads lowest quality video variant (bandwidth-efficient)
+- ✅ Audio language selection (ENG → SPA → ESP → first available)
+- ✅ Subtitle embedding when language matches audio
+- ✅ Live stream support (captures complete streams)
+- ✅ Encrypted segments (AES-128 decryption)
+- ✅ Resume after app restart
+- ✅ Export to SD card via SAF
+
+### Output Format
+
+- **Video**: H.264 (transcoded if necessary)
+- **Audio**: AAC (transcoded if necessary)
+- **Container**: MP4 (VLC-compatible)
+- **Subtitles**: mov_text (embedded when available)
+
 # Recent Updates
 
 ## Comprehensive Bug Fixes (January 2026)
