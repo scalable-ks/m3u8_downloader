@@ -7,6 +7,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 interface DownloadStateStore {
     fun get(jobId: String): DownloadJobState?
@@ -28,29 +29,54 @@ class FileDownloadStateStore(
 ) : DownloadStateStore {
     constructor(context: Context) : this(context.filesDir)
 
+    // Batching mechanism for updateSegment
+    private val pendingUpdates = ConcurrentHashMap<String, SegmentState>()
+    private var lastFlushTime = System.currentTimeMillis()
+    private val flushIntervalMs = 5000L // Flush every 5 seconds
+    private val maxPendingUpdates = 10 // Or when 10 updates accumulate
+
     override fun get(jobId: String): DownloadJobState? {
         val file = stateFile(jobId)
         if (!file.exists()) return null
 
-        return try {
-            val json = JSONObject(file.readText())
-            decodeState(json)
-        } catch (e: JSONException) {
-            Log.e("StateStore", "Corrupted state file for job $jobId, deleting", e)
-            file.delete()
-            null
-        } catch (e: IOException) {
-            Log.e("StateStore", "I/O error reading state for job $jobId", e)
-            null
-        } catch (e: IllegalArgumentException) {
-            Log.e("StateStore", "Invalid state data for job $jobId, deleting", e)
-            file.delete()
-            null
-        } catch (e: Exception) {
-            Log.e("StateStore", "Unexpected error reading state for job $jobId, deleting", e)
-            file.delete()
-            null
+        val baseState =
+            try {
+                val json = JSONObject(file.readText())
+                decodeState(json)
+            } catch (e: JSONException) {
+                Log.e("StateStore", "Corrupted state file for job $jobId, deleting", e)
+                file.delete()
+                null
+            } catch (e: IOException) {
+                Log.e("StateStore", "I/O error reading state for job $jobId", e)
+                null
+            } catch (e: IllegalArgumentException) {
+                Log.e("StateStore", "Invalid state data for job $jobId, deleting", e)
+                file.delete()
+                null
+            } catch (e: Exception) {
+                Log.e("StateStore", "Unexpected error reading state for job $jobId, deleting", e)
+                file.delete()
+                null
+            } ?: return null
+
+        // Apply any pending updates that haven't been flushed yet
+        val pendingForThisJob =
+            pendingUpdates.entries
+                .filter { it.key.startsWith("$jobId:") }
+                .associate { it.key to it.value }
+
+        if (pendingForThisJob.isEmpty()) {
+            return baseState
         }
+
+        val updatedSegments =
+            baseState.segments.map { segment ->
+                val updateKey = "$jobId:${segment.fileKey}"
+                pendingForThisJob[updateKey] ?: segment
+            }
+
+        return baseState.copy(segments = updatedSegments)
     }
 
     override fun list(): List<DownloadJobState> {
@@ -81,26 +107,70 @@ class FileDownloadStateStore(
 
     @Synchronized
     override fun save(state: DownloadJobState) {
+        // Flush pending updates before saving to maintain consistency
+        flushPendingUpdates()
         val file = stateFile(state.id)
         file.writeText(encodeState(state).toString())
     }
 
-    @Synchronized
     override fun updateSegment(
         jobId: String,
         segment: SegmentState,
     ) {
-        val existing = get(jobId) ?: return
-        val updated =
-            existing.copy(
-                segments = existing.segments.map { if (it.fileKey == segment.fileKey) segment else it },
-                updatedAt = System.currentTimeMillis(),
-            )
-        save(updated)
+        // Add to pending updates cache
+        val key = "$jobId:${segment.fileKey}"
+        pendingUpdates[key] = segment
+
+        // Auto-flush if conditions met
+        val shouldFlush =
+            pendingUpdates.size >= maxPendingUpdates ||
+                (System.currentTimeMillis() - lastFlushTime) >= flushIntervalMs
+
+        if (shouldFlush) {
+            flushPendingUpdates()
+        }
+    }
+
+    @Synchronized
+    private fun flushPendingUpdates() {
+        if (pendingUpdates.isEmpty()) return
+
+        val startTime = System.currentTimeMillis()
+        val updates = pendingUpdates.toMap()
+        pendingUpdates.clear()
+        lastFlushTime = System.currentTimeMillis()
+
+        // Group updates by jobId
+        val updatesByJob = updates.entries.groupBy { it.key.substringBefore(":") }
+
+        updatesByJob.forEach { (jobId, segmentEntries) ->
+            val existing = get(jobId) ?: return@forEach
+
+            val updatedSegments =
+                existing.segments.map { existingSegment ->
+                    // Check if this segment has a pending update
+                    val updateKey = "$jobId:${existingSegment.fileKey}"
+                    updates[updateKey] ?: existingSegment
+                }
+
+            val updated =
+                existing.copy(
+                    segments = updatedSegments,
+                    updatedAt = System.currentTimeMillis(),
+                )
+
+            val file = stateFile(jobId)
+            file.writeText(encodeState(updated).toString())
+        }
+
+        val duration = System.currentTimeMillis() - startTime
+        Log.d("StateStore", "Flushed ${updates.size} segment updates for ${updatesByJob.size} jobs in ${duration}ms")
     }
 
     @Synchronized
     override fun delete(jobId: String) {
+        // Flush pending updates for this job before deleting
+        flushPendingUpdates()
         val file = stateFile(jobId)
         if (file.exists()) {
             file.delete()
