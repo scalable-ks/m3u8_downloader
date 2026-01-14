@@ -5,7 +5,18 @@ import type { MasterPlaylist } from "../domain/types.ts";
 import type { DownloadPlan, TrackPlan } from "./models.ts";
 
 const COOKIE_SEPARATOR = "; ";
-const DEFAULT_MAX_LIVE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// Time unit conversion constants
+const MILLISECONDS_PER_SECOND = 1000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const HOURS_IN_DEFAULT_MAX_DURATION = 6;
+const DEFAULT_MAX_LIVE_DURATION_MS =
+  HOURS_IN_DEFAULT_MAX_DURATION * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+
+// Exponential backoff constants
+const BACKOFF_MULTIPLIER = 2;
+const MAX_BACKOFF_DELAY_MS = 30000;
 
 export type CookieInput = string | Record<string, string>;
 
@@ -144,7 +155,7 @@ async function buildTrackPlanWithLiveRefresh(
       } catch (error) {
         console.error(`Error fetching live playlist (attempt ${refreshes}):`, error);
         // Implement exponential backoff on error
-        await sleep(Math.min(delayMs * 2, 30000));
+        await sleep(Math.min(delayMs * BACKOFF_MULTIPLIER, MAX_BACKOFF_DELAY_MS));
       }
     }
 
