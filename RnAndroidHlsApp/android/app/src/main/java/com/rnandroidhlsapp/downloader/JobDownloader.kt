@@ -223,6 +223,11 @@ class JobDownloader(
                                 completed = true
                                 publishProgress(request.id)
                             } catch (e: Exception) {
+                                Log.w(
+                                    "JobDownloader",
+                                    "Segment download failed (attempt $attempt): ${segment.uri}",
+                                    e,
+                                )
                                 if (!retryPolicy.shouldRetry(attempt)) {
                                     stateStore.updateSegment(
                                         request.id,
@@ -236,6 +241,7 @@ class JobDownloader(
                                     )
                                     val failures = failureCount.incrementAndGet()
                                     if (failures >= maxFailures) {
+                                        Log.e("JobDownloader", "Failure budget exceeded for job ${request.id}")
                                         stateStore.save(
                                             stateStore.get(request.id)?.copy(
                                                 state = JobState.FAILED,
@@ -371,8 +377,35 @@ class JobDownloader(
     }
 
     private fun ensureDiskSpace(request: DownloadRequest): Boolean {
-        val required = request.requiredBytes ?: return true
-        return request.outputDir.usableSpace > required
+        val usableSpace = request.outputDir.usableSpace
+
+        // Android system reserve: 10% or 500MB, whichever is larger
+        val systemReserve = maxOf(usableSpace / 10, 500L * 1024 * 1024)
+        val availableForDownload = usableSpace - systemReserve
+
+        if (request.requiredBytes != null) {
+            // Account for assembly overhead (estimate 2x for MP4 + concat files)
+            val totalRequired = request.requiredBytes * 2
+            if (availableForDownload < totalRequired) {
+                Log.w(
+                    "JobDownloader",
+                    "Insufficient disk space: required=${totalRequired}, available=${availableForDownload}",
+                )
+                return false
+            }
+        } else {
+            // For live streams or unknown size, require minimum 1GB free
+            val minimumRequired = 1024L * 1024 * 1024 // 1GB
+            if (availableForDownload < minimumRequired) {
+                Log.w(
+                    "JobDownloader",
+                    "Insufficient disk space for unknown size: available=${availableForDownload}, minimum=${minimumRequired}",
+                )
+                return false
+            }
+        }
+
+        return true
     }
 
     private fun isSegmentComplete(
@@ -444,6 +477,7 @@ class JobDownloader(
             }
             true
         } catch (e: Exception) {
+            Log.e("JobDownloader", "Failed to download init segment: ${map.uri}", e)
             errorListener.onError(jobId, "network", "Failed to download init segment", e.message)
             false
         }

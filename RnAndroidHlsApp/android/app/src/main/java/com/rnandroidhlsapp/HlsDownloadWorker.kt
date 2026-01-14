@@ -25,7 +25,12 @@ import com.rnandroidhlsapp.muxing.MuxRequest
 import com.rnandroidhlsapp.muxing.SubtitleInput
 import com.rnandroidhlsapp.muxing.SubtitleMerger
 import com.rnandroidhlsapp.muxing.TrackInput
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
+import android.util.Log
 
 class HlsDownloadWorker(
     appContext: Context,
@@ -98,7 +103,7 @@ class HlsDownloadWorker(
         }
     }
 
-    private fun assembleAndExport(parsed: ParsedPlan): Boolean {
+    private suspend fun assembleAndExport(parsed: ParsedPlan): Boolean {
         if (parsed.videoSegments.isEmpty()) {
             val state = stateStore.get(parsed.request.id) ?: return false
             stateStore.save(
@@ -196,27 +201,54 @@ class HlsDownloadWorker(
         return SubtitleMerger.mergeSrtSegments(subtitleFiles, output)
     }
 
-    private fun exportToSaf(
+    private suspend fun exportToSaf(
         exportTreeUri: String,
         sourceFile: File,
-    ): Boolean {
-        val tree = androidx.documentfile.provider.DocumentFile.fromTreeUri(
-            applicationContext,
-            android.net.Uri.parse(exportTreeUri),
-        ) ?: return false
-        val displayName = sourceFile.name.removeSuffix(".mp4")
-        val target = tree.createFile("video/mp4", displayName) ?: return false
-        return try {
-            applicationContext.contentResolver.openOutputStream(target.uri)?.use { output ->
-                sourceFile.inputStream().use { input ->
-                    input.copyTo(output)
-                }
-            } ?: return false
-            true
-        } catch (e: Exception) {
-            false
+    ): Boolean =
+        withContext(Dispatchers.IO) {
+            return@withContext try {
+                val tree =
+                    androidx.documentfile.provider.DocumentFile.fromTreeUri(
+                        applicationContext,
+                        android.net.Uri.parse(exportTreeUri),
+                    ) ?: return@withContext false
+
+                val displayName = sourceFile.name.removeSuffix(".mp4")
+                val target = tree.createFile("video/mp4", displayName) ?: return@withContext false
+
+                val totalSize = sourceFile.length()
+                var copiedBytes = 0L
+                val buffer = ByteArray(16 * 1024) // 16KB buffer
+
+                applicationContext.contentResolver.openOutputStream(target.uri)?.use { output ->
+                    sourceFile.inputStream().use { input ->
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            if (!isActive) {
+                                Log.w("ExportSAF", "Export cancelled")
+                                return@withContext false
+                            }
+                            output.write(buffer, 0, bytesRead)
+                            copiedBytes += bytesRead
+                            // TODO: Report progress via notification
+                            // Can add: setForegroundAsync(createExportProgressInfo(copiedBytes, totalSize))
+                        }
+                    }
+                } ?: return@withContext false
+
+                Log.i("ExportSAF", "Export completed: ${sourceFile.name}")
+                true
+            } catch (e: IOException) {
+                Log.e("ExportSAF", "I/O error during export: ${sourceFile.path}", e)
+                false
+            } catch (e: SecurityException) {
+                Log.e("ExportSAF", "Permission error during export", e)
+                false
+            } catch (e: Exception) {
+                Log.e("ExportSAF", "Unexpected error during export", e)
+                false
+            }
         }
-    }
 
     private fun createForegroundInfo(
         jobId: String,
