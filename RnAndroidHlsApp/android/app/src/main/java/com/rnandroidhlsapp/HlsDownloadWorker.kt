@@ -88,7 +88,7 @@ class HlsDownloadWorker(
                 errorListener = errorListener,
                 retryPolicy = RetryPolicy.default(),
                 constraintChecker = AndroidConstraintChecker(applicationContext),
-                parentScope = this,
+                parentScope = null,
             )
 
         // Await completion directly - no polling!
@@ -166,7 +166,7 @@ class HlsDownloadWorker(
         if (exportUri.isNullOrBlank()) {
             return true
         }
-        val exported = exportToSaf(exportUri, outputFile)
+        val exported = exportToSaf(exportUri, outputFile, parsed.request.id)
         if (!exported) {
             val state = stateStore.get(parsed.request.id) ?: return false
             stateStore.save(
@@ -208,6 +208,7 @@ class HlsDownloadWorker(
     private suspend fun exportToSaf(
         exportTreeUri: String,
         sourceFile: File,
+        jobId: String,
     ): Boolean =
         withContext(Dispatchers.IO) {
             return@withContext try {

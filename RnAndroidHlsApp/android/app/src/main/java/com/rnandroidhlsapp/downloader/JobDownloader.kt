@@ -309,9 +309,9 @@ class JobDownloader(
                     publishProgress(request.id)
                     delay(1_000)
                     updateJobStateIfDone(request.id)
-                    val state = stateStore.get(request.id) ?: return@launch
+                    val state = stateStore.get(request.id) ?: break
                     if (state.state == JobState.COMPLETED || state.state == JobState.FAILED) {
-                        return@launch
+                        break
                     }
                 }
             }
@@ -332,7 +332,7 @@ class JobDownloader(
                             "Insufficient disk space during download",
                         )
                         cancel(request.id, request.outputDir, request.cleanupPolicy)
-                        return@launch
+                        break
                     }
                 }
             }
@@ -516,7 +516,7 @@ class JobDownloader(
         return partialFile.takeIf { it.exists() }?.length() ?: 0
     }
 
-    private fun ensureMapDownloaded(
+    private suspend fun ensureMapDownloaded(
         segment: Segment,
         jobId: String,
         outputDir: File,
