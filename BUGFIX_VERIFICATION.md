@@ -10,22 +10,36 @@ All existing tests pass (20/20 ✅), confirming backward compatibility maintaine
 ### Automated Tests
 ```
 npm test
-✔ 20 tests passed
+✔ 32 tests passed (was 20 before bug fixes)
 ✔ 0 tests failed
-Duration: 985ms
+Duration: ~8 seconds
 ```
 
-**Coverage:**
+**Test Coverage Expanded (+12 new tests):**
+
+**Original Coverage:**
 - ✅ parseHeadersInput/parseCookiesInput validation
 - ✅ NodeFileJobStore persistence
 - ✅ DownloadManager exportTreeUri forwarding
 - ✅ buildDownloadPlan playlist fetching
-- ✅ Live playlist refresh logic (with new unlimited refresh)
 - ✅ DRM detection
 - ✅ Live playlist merging
 - ✅ Master playlist parsing
 - ✅ Track selection
 - ✅ Media playlist parsing with key rotation
+
+**New Bug Fix Regression Tests:**
+- ✅ URL validation (9 tests) - validates http/https, rejects invalid protocols
+- ✅ Live stream unlimited refreshes - proves Bug #7 fix works (>5 refreshes)
+- ✅ Live stream maxLiveDurationMs safety limit - prevents infinite loops
+- ✅ Live stream AbortSignal cancellation - proper cleanup on cancel
+
+**TESTING_GUIDE.md Compliance:**
+- ✅ All tests follow AAA pattern (Arrange-Act-Assert)
+- ✅ Test observable behavior only (not implementation details)
+- ✅ Clear descriptive test names
+- ✅ Edge cases and error cases included
+- ✅ Bug regressions documented with comments
 
 ## Phase 1: Memory/Lifecycle Fixes ✅
 
