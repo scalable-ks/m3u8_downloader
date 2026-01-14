@@ -1,9 +1,12 @@
 package com.rnandroidhlsapp.downloader
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 
 interface DownloadStateStore {
     fun get(jobId: String): DownloadJobState?
@@ -28,19 +31,52 @@ class FileDownloadStateStore(
     override fun get(jobId: String): DownloadJobState? {
         val file = stateFile(jobId)
         if (!file.exists()) return null
-        val json = JSONObject(file.readText())
-        return decodeState(json)
+
+        return try {
+            val json = JSONObject(file.readText())
+            decodeState(json)
+        } catch (e: JSONException) {
+            Log.e("StateStore", "Corrupted state file for job $jobId, deleting", e)
+            file.delete()
+            null
+        } catch (e: IOException) {
+            Log.e("StateStore", "I/O error reading state for job $jobId", e)
+            null
+        } catch (e: IllegalArgumentException) {
+            Log.e("StateStore", "Invalid state data for job $jobId, deleting", e)
+            file.delete()
+            null
+        } catch (e: Exception) {
+            Log.e("StateStore", "Unexpected error reading state for job $jobId, deleting", e)
+            file.delete()
+            null
+        }
     }
 
     override fun list(): List<DownloadJobState> {
         val dir = stateDir()
         if (!dir.exists()) return emptyList()
-        return dir.listFiles()
-            ?.filter { it.isFile && it.extension == "json" }
-            ?.mapNotNull { file ->
-                runCatching { decodeState(JSONObject(file.readText())) }.getOrNull()
-            }
-            ?: emptyList()
+
+        var corruptedCount = 0
+        val states =
+            dir.listFiles()
+                ?.filter { it.isFile && it.extension == "json" }
+                ?.mapNotNull { file ->
+                    runCatching {
+                        decodeState(JSONObject(file.readText()))
+                    }.onFailure { e ->
+                        Log.w("StateStore", "Skipping corrupted file: ${file.name}", e)
+                        corruptedCount++
+                        file.delete()
+                    }.getOrNull()
+                }
+                ?: emptyList()
+
+        if (corruptedCount > 0) {
+            Log.w("StateStore", "Removed $corruptedCount corrupted state files")
+        }
+
+        return states
     }
 
     @Synchronized

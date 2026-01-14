@@ -1,18 +1,30 @@
 package com.rnandroidhlsapp.downloader
 
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+
+sealed class DownloadResult {
+    object Success : DownloadResult()
+    object Failure : DownloadResult()
+    object Cancelled : DownloadResult()
+}
 
 class JobDownloader(
     private val stateStore: DownloadStateStore,
@@ -24,8 +36,9 @@ class JobDownloader(
     private val segmentDownloader: SegmentDownloader? = null,
     private val maxFailures: Int = 5,
     private val constraintChecker: ConstraintChecker = NoopConstraintChecker,
+    private val parentScope: CoroutineScope? = null,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var jobScope: CoroutineScope? = null
     private val isCanceled = AtomicBoolean(false)
     private val failureCount = AtomicInteger(0)
 
@@ -41,6 +54,7 @@ class JobDownloader(
         cleanupPolicy: CleanupPolicy = CleanupPolicy(),
     ) {
         isCanceled.set(true)
+        cleanup()
         if (cleanupPolicy.deleteOnCancel) {
             cleanupFiles(outputDir, deleteCompleted = false)
         }
@@ -51,10 +65,23 @@ class JobDownloader(
         completionListener?.onComplete(jobId, JobState.CANCELED)
     }
 
-    fun start(
+    private fun cleanup() {
+        jobScope?.cancel()
+        jobScope = null
+    }
+
+    suspend fun start(
         request: DownloadRequest,
         segments: List<Segment>,
-    ) {
+    ): DownloadResult = withContext(Dispatchers.IO) {
+        // Create child scope for this job
+        jobScope = if (parentScope != null) {
+            CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentScope.coroutineContext[Job]))
+        } else {
+            // Fallback for backward compatibility
+            CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        }
+
         val constraintResult = constraintChecker.check(request.constraints, request)
         if (!constraintResult.allowed) {
             val failedState =
@@ -76,7 +103,8 @@ class JobDownloader(
                 constraintResult.reason ?: "Constraints not met",
             )
             completionListener?.onComplete(request.id, JobState.FAILED)
-            return
+            cleanup()
+            return@withContext DownloadResult.Failure
         }
         if (!ensureDiskSpace(request)) {
             val failedState =
@@ -94,7 +122,8 @@ class JobDownloader(
             stateStore.save(failedState)
             errorListener.onError(request.id, "storage", "Insufficient disk space")
             completionListener?.onComplete(request.id, JobState.FAILED)
-            return
+            cleanup()
+            return@withContext DownloadResult.Failure
         }
 
         val existingState = stateStore.get(request.id)
@@ -107,7 +136,7 @@ class JobDownloader(
 
         val jobs =
             segments.filterNot { isSegmentComplete(it, request.outputDir) }.map { segment ->
-                scope.launch {
+                jobScope!!.launch {
                     semaphore.withPermit {
                         if (isCanceled.get()) {
                             return@withPermit
@@ -231,28 +260,51 @@ class JobDownloader(
                 }
             }
 
-        scope.launch {
-            while (!isCanceled.get()) {
-                publishProgress(request.id)
-                delay(1_000)
-                updateJobStateIfDone(request.id)
-                val state = stateStore.get(request.id) ?: return@launch
-                if (state.state == JobState.COMPLETED || state.state == JobState.FAILED) {
-                    return@launch
+        // Launch progress monitoring as separate job
+        val progressJob =
+            jobScope!!.launch {
+                while (isActive && !isCanceled.get()) {
+                    publishProgress(request.id)
+                    delay(1_000)
+                    updateJobStateIfDone(request.id)
+                    val state = stateStore.get(request.id) ?: return@launch
+                    if (state.state == JobState.COMPLETED || state.state == JobState.FAILED) {
+                        return@launch
+                    }
                 }
             }
-        }
 
-        scope.launch {
+        // Await all downloads and handle result
+        return@withContext try {
             jobs.joinAll()
+            progressJob.cancel()
             updateJobStateIfDone(request.id)
-            val state = stateStore.get(request.id)
-            if (state != null) {
-                completionListener?.onComplete(request.id, state.state)
+            val finalState = stateStore.get(request.id)
+
+            if (finalState != null) {
+                completionListener?.onComplete(request.id, finalState.state)
             }
-            if (state?.state == JobState.COMPLETED && request.cleanupPolicy.deleteOnSuccess) {
-                cleanupFiles(request.outputDir, deleteCompleted = true)
+
+            if (finalState?.state == JobState.COMPLETED) {
+                if (request.cleanupPolicy.deleteOnSuccess) {
+                    cleanupFiles(request.outputDir, deleteCompleted = true)
+                }
+                cleanup()
+                DownloadResult.Success
+            } else {
+                cleanup()
+                DownloadResult.Failure
             }
+        } catch (e: CancellationException) {
+            Log.i("JobDownloader", "Download cancelled for job ${request.id}")
+            progressJob.cancel()
+            cleanup()
+            DownloadResult.Cancelled
+        } catch (e: Exception) {
+            Log.e("JobDownloader", "Download failed for job ${request.id}", e)
+            progressJob.cancel()
+            cleanup()
+            DownloadResult.Failure
         }
     }
 

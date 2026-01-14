@@ -25,7 +25,6 @@ import com.rnandroidhlsapp.muxing.MuxRequest
 import com.rnandroidhlsapp.muxing.SubtitleInput
 import com.rnandroidhlsapp.muxing.SubtitleMerger
 import com.rnandroidhlsapp.muxing.TrackInput
-import kotlinx.coroutines.delay
 import java.io.File
 
 class HlsDownloadWorker(
@@ -80,30 +79,22 @@ class HlsDownloadWorker(
                 errorListener = errorListener,
                 retryPolicy = RetryPolicy.default(),
                 constraintChecker = AndroidConstraintChecker(applicationContext),
+                parentScope = this,
             )
-        downloader.start(parsed.request, parsed.segments)
 
-        while (true) {
-            if (isStopped) {
-                downloader.cancel(jobId, parsed.request.outputDir, parsed.request.cleanupPolicy)
-                return Result.failure()
+        // Await completion directly - no polling!
+        val downloadResult = downloader.start(parsed.request, parsed.segments)
+
+        return when (downloadResult) {
+            is com.rnandroidhlsapp.downloader.DownloadResult.Success -> {
+                if (assembleAndExport(parsed)) {
+                    Result.success()
+                } else {
+                    Result.failure()
+                }
             }
-            val state = stateStore.get(jobId) ?: return Result.failure()
-            if (state.state == JobState.COMPLETED || state.state == JobState.FAILED) {
-                break
-            }
-            delay(POLL_INTERVAL_MS)
-        }
-
-        val finalState = stateStore.get(jobId)
-        if (finalState?.state != JobState.COMPLETED) {
-            return Result.failure()
-        }
-
-        return if (assembleAndExport(parsed)) {
-            Result.success()
-        } else {
-            Result.failure()
+            is com.rnandroidhlsapp.downloader.DownloadResult.Failure -> Result.failure()
+            is com.rnandroidhlsapp.downloader.DownloadResult.Cancelled -> Result.failure()
         }
     }
 
@@ -269,6 +260,5 @@ class HlsDownloadWorker(
         const val KEY_PLAN_JSON = "plan_json"
         const val CHANNEL_ID = "download_channel"
         const val NOTIFICATION_ID_BASE = 1000
-        const val POLL_INTERVAL_MS = 1000L
     }
 }
