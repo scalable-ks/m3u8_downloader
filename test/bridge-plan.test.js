@@ -71,7 +71,7 @@ aseg2.aac
   assert.equal(plan.exportTreeUri, "content://tree/primary%3ADownloads");
 });
 
-test("buildDownloadPlan refreshes live playlists up to limit", async () => {
+test("buildDownloadPlan refreshes live playlists until ENDLIST", async () => {
   // ARRANGE
   const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nvideo.m3u8";
   const initialVideo =
@@ -89,12 +89,113 @@ test("buildDownloadPlan refreshes live playlists up to limit", async () => {
     masterPlaylistUri: "https://example.com/master.m3u8",
     fetcher,
     sleep: async () => {},
-    liveRefreshLimit: 2,
   });
 
   // ASSERT
   assert.equal(plan.video.segments.length, 1);
   assert.equal(plan.video.segments[0].uri, "https://example.com/seg2.ts");
+});
+
+test("buildDownloadPlan continues beyond old 5-refresh limit (regression)", async () => {
+  // Bug #7: Previously limited to 5 refreshes, now continues until ENDLIST
+  // ARRANGE
+  const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nvideo.m3u8";
+  const liveVideo = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nseg";
+  const finalVideo =
+    "#EXTM3U\n#EXT-X-TARGETDURATION:2\n" +
+    Array.from({ length: 10 }, (_, i) => `#EXTINF:2,\nseg${i}.ts`).join("\n") +
+    "\n#EXT-X-ENDLIST";
+
+  // Return live playlist 8 times, then final
+  const fetcher = createSequencedFetcher({
+    "https://example.com/master.m3u8": [master],
+    "https://example.com/video.m3u8": [
+      liveVideo,
+      liveVideo,
+      liveVideo,
+      liveVideo,
+      liveVideo,
+      liveVideo, // Old limit was 5, we're at 6 refreshes now
+      liveVideo,
+      liveVideo,
+      finalVideo,
+    ],
+  });
+
+  // ACT
+  const plan = await buildDownloadPlan({
+    id: "job-regression",
+    masterPlaylistUri: "https://example.com/master.m3u8",
+    fetcher,
+    sleep: async () => {},
+  });
+
+  // ASSERT
+  assert.equal(plan.video.segments.length, 10, "Should capture all 10 segments beyond old 5-refresh limit");
+});
+
+test("buildDownloadPlan stops at maxLiveDurationMs safety limit", async () => {
+  // ARRANGE
+  const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nvideo.m3u8";
+  const liveVideo = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nseg1.ts";
+  const fetcher = async (url, headers) => {
+    // Always return live (no ENDLIST)
+    if (url.includes("master")) return master;
+    return liveVideo;
+  };
+
+  let sleepCalls = 0;
+  const mockSleep = async (ms) => {
+    sleepCalls++;
+  };
+
+  // ACT
+  const plan = await buildDownloadPlan({
+    id: "job-duration-limit",
+    masterPlaylistUri: "https://example.com/master.m3u8",
+    fetcher,
+    sleep: mockSleep,
+    maxLiveDurationMs: 100, // Very short duration for test
+  });
+
+  // ASSERT
+  // Should have stopped due to duration limit, not infinite loop
+  assert.ok(sleepCalls > 0, "Should have attempted at least one refresh");
+  assert.ok(sleepCalls < 1000, "Should not loop infinitely");
+});
+
+test("buildDownloadPlan respects AbortSignal cancellation", async () => {
+  // ARRANGE
+  const master = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nvideo.m3u8";
+  const liveVideo = "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nseg1.ts";
+  const fetcher = async (url, headers) => {
+    if (url.includes("master")) return master;
+    return liveVideo;
+  };
+
+  const controller = new AbortController();
+  let sleepCalls = 0;
+  const mockSleep = async (ms) => {
+    sleepCalls++;
+    if (sleepCalls === 2) {
+      controller.abort(); // Cancel after 2 refreshes
+    }
+  };
+
+  // ACT & ASSERT
+  await assert.rejects(
+    async () => {
+      await buildDownloadPlan({
+        id: "job-cancel",
+        masterPlaylistUri: "https://example.com/master.m3u8",
+        fetcher,
+        sleep: mockSleep,
+        signal: controller.signal,
+      });
+    },
+    /cancelled/i,
+    "Should throw cancellation error when signal aborted",
+  );
 });
 
 function createSequencedFetcher(map) {

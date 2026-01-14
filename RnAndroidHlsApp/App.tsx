@@ -8,15 +8,7 @@ import type { Logger } from "./src/bridge/logger.ts";
 import { NativeDownloaderBridge } from "./src/bridge/nativeBridge.ts";
 import { NativeJobStore } from "./src/bridge/nativeJobStore.ts";
 import { parseCookiesInput, parseHeadersInput } from "./src/ui/auth.ts";
-
-function validatePlaylistUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
+import { validatePlaylistUrl } from "./src/ui/validation.ts";
 
 function App(): JSX.Element {
   const [logs, setLogs] = useState<string[]>([]);
