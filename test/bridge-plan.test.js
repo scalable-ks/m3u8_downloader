@@ -144,9 +144,11 @@ test("buildDownloadPlan stops at maxLiveDurationMs safety limit", async () => {
     return liveVideo;
   };
 
-  let sleepCalls = 0;
+  let refreshCount = 0;
   const mockSleep = async (ms) => {
-    sleepCalls++;
+    refreshCount++;
+    // Simulate time passing by actually waiting a bit
+    await new Promise((resolve) => setTimeout(resolve, 1));
   };
 
   // ACT
@@ -155,13 +157,14 @@ test("buildDownloadPlan stops at maxLiveDurationMs safety limit", async () => {
     masterPlaylistUri: "https://example.com/master.m3u8",
     fetcher,
     sleep: mockSleep,
-    maxLiveDurationMs: 100, // Very short duration for test
+    maxLiveDurationMs: 50, // Very short for test performance
   });
 
   // ASSERT
-  // Should have stopped due to duration limit, not infinite loop
-  assert.ok(sleepCalls > 0, "Should have attempted at least one refresh");
-  assert.ok(sleepCalls < 1000, "Should not loop infinitely");
+  // Should have stopped due to duration limit (not infinite loop)
+  // With 50ms limit and 1ms per refresh, expect ~10-50 refreshes
+  assert.ok(refreshCount > 0, "Should have attempted at least one refresh");
+  assert.ok(refreshCount < 500, "Should stop within reasonable iterations");
 });
 
 test("buildDownloadPlan respects AbortSignal cancellation", async () => {
