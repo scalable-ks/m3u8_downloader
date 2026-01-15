@@ -1,6 +1,7 @@
 package com.rnandroidhlsapp
 
 import android.content.Context
+import android.util.Log
 import java.io.File
 
 /**
@@ -23,7 +24,7 @@ class PlanFileStore(private val context: Context) {
             file.writeText(planJson)
             true
         } catch (e: Exception) {
-            android.util.Log.e("PlanFileStore", "Failed to save plan for job $jobId", e)
+            Log.e("PlanFileStore", "Failed to save plan for job $jobId", e)
             false
         }
     }
@@ -39,11 +40,11 @@ class PlanFileStore(private val context: Context) {
             if (file.exists()) {
                 file.readText()
             } else {
-                android.util.Log.w("PlanFileStore", "Plan file not found for job $jobId")
+                Log.w("PlanFileStore", "Plan file not found for job $jobId")
                 null
             }
         } catch (e: Exception) {
-            android.util.Log.e("PlanFileStore", "Failed to load plan for job $jobId", e)
+            Log.e("PlanFileStore", "Failed to load plan for job $jobId", e)
             null
         }
     }
@@ -59,7 +60,7 @@ class PlanFileStore(private val context: Context) {
                 file.delete()
             }
         } catch (e: Exception) {
-            android.util.Log.e("PlanFileStore", "Failed to delete plan for job $jobId", e)
+            Log.e("PlanFileStore", "Failed to delete plan for job $jobId", e)
         }
     }
 
@@ -74,11 +75,11 @@ class PlanFileStore(private val context: Context) {
             plansDir.listFiles()?.forEach { file ->
                 if (file.isFile && (now - file.lastModified()) > maxAge) {
                     file.delete()
-                    android.util.Log.d("PlanFileStore", "Cleaned up old plan file: ${file.name}")
+                    Log.d("PlanFileStore", "Cleaned up old plan file: ${file.name}")
                 }
             }
         } catch (e: Exception) {
-            android.util.Log.e("PlanFileStore", "Failed to cleanup old plans", e)
+            Log.e("PlanFileStore", "Failed to cleanup old plans", e)
         }
     }
 }

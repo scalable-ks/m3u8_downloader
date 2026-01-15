@@ -4,6 +4,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
@@ -177,7 +178,7 @@ class HlsDownloaderModule(
     ) {
         // Save plan to file to avoid WorkManager's 10KB input data limit
         if (!planStore.save(jobId, planJson)) {
-            android.util.Log.e("HlsDownloaderModule", "Failed to save plan for job $jobId")
+            Log.e("HlsDownloaderModule", "Failed to save plan for job $jobId")
             throw Exception("Failed to save download plan")
         }
 
