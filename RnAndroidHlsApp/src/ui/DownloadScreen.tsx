@@ -37,6 +37,10 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
       .sort((a, b) => b.createdAt - a.createdAt)[0];
   }, [jobs]);
 
+  const hasActiveDownload = useMemo(() => {
+    return jobs.some((job) => job.state === "queued" || job.state === "running");
+  }, [jobs]);
+
   useEffect(() => {
     const animation = Animated.loop(
       Animated.sequence([
@@ -89,13 +93,21 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
           <Pressable
             style={({ pressed }) => [
               styles.startButton,
-              pressed ? styles.startButtonPressed : null,
+              pressed && !hasActiveDownload ? styles.startButtonPressed : null,
+              hasActiveDownload ? styles.startButtonDisabled : null,
             ]}
-            onPress={() => props.onStart(playlistUri.trim(), "", "")}
+            onPress={() => !hasActiveDownload && props.onStart(playlistUri.trim(), "", "")}
+            disabled={hasActiveDownload}
           >
             {({ pressed }) => (
-              <Text style={[styles.startButtonText, pressed ? styles.startButtonTextPressed : null]}>
-                START DOWNLOAD
+              <Text
+                style={[
+                  styles.startButtonText,
+                  pressed && !hasActiveDownload ? styles.startButtonTextPressed : null,
+                  hasActiveDownload ? styles.startButtonTextDisabled : null,
+                ]}
+              >
+                {hasActiveDownload ? "DOWNLOAD IN PROGRESS..." : "START DOWNLOAD"}
               </Text>
             )}
           </Pressable>
@@ -342,6 +354,13 @@ const styles = StyleSheet.create({
   },
   startButtonTextPressed: {
     color: "#1f2937",
+  },
+  startButtonDisabled: {
+    backgroundColor: "#9ca3af",
+    opacity: 0.6,
+  },
+  startButtonTextDisabled: {
+    color: "#4b5563",
   },
   card: {
     padding: 12,
