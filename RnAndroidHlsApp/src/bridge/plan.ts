@@ -64,12 +64,43 @@ function loadMaster(content: string, uri: string): MasterPlaylist {
 
 export async function buildDownloadPlan(options: PlanOptions): Promise<DownloadPlan> {
   const headers = mergeHeaders(options.headers, options.cookies);
-  const masterContent = await fetchPlaylist(options.masterPlaylistUri, headers, options.fetcher);
-  const master = loadMaster(masterContent, options.masterPlaylistUri);
-  const tracks = selectTracks(master);
 
-  const videoContent = await fetchPlaylist(tracks.video.uri, headers, options.fetcher);
-  const video = await buildTrackPlanWithLiveRefresh(tracks.video.uri, videoContent, headers, options);
+  let masterContent: string;
+  let master: MasterPlaylist;
+
+  try {
+    console.log("Fetching master playlist:", options.masterPlaylistUri);
+    masterContent = await fetchPlaylist(options.masterPlaylistUri, headers, options.fetcher);
+    console.log("Master playlist fetched, size:", masterContent.length, "bytes");
+  } catch (error) {
+    throw new Error(`Failed to fetch master playlist from ${options.masterPlaylistUri}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    master = loadMaster(masterContent, options.masterPlaylistUri);
+    console.log("Master playlist parsed successfully");
+  } catch (error) {
+    throw new Error(`Failed to parse master playlist: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const tracks = selectTracks(master);
+  console.log("Tracks selected - video:", tracks.video.uri, "audio:", tracks.audio?.uri ?? "none", "subtitle:", tracks.subtitle?.uri ?? "none");
+
+  let videoContent: string;
+  try {
+    videoContent = await fetchPlaylist(tracks.video.uri, headers, options.fetcher);
+    console.log("Video playlist fetched, size:", videoContent.length, "bytes");
+  } catch (error) {
+    throw new Error(`Failed to fetch video playlist from ${tracks.video.uri}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  let video: TrackPlan;
+  try {
+    video = await buildTrackPlanWithLiveRefresh(tracks.video.uri, videoContent, headers, options);
+    console.log("Video track plan built, segments:", video.segments.length);
+  } catch (error) {
+    throw new Error(`Failed to build video track plan: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   const audio =
     tracks.audio?.uri
@@ -90,6 +121,8 @@ export async function buildDownloadPlan(options: PlanOptions): Promise<DownloadP
           options,
         )
       : undefined;
+
+  console.log("Download plan built successfully - total segments:", video.segments.length + (audio?.segments.length ?? 0) + (subtitles?.segments.length ?? 0));
 
   return {
     id: options.id,

@@ -72,7 +72,31 @@ export class NativeDownloaderBridge implements DownloaderBridge {
   }
 
   async startPlannedJob(plan: DownloadPlan) {
-    const status = await this.nativeModule.startPlannedJob(JSON.stringify(plan));
+    let planJson: string;
+    try {
+      // Serialize plan to JSON
+      planJson = JSON.stringify(plan);
+      console.log("Plan serialized successfully, size:", planJson.length, "bytes");
+
+      // Validate that the JSON can be parsed back (sanity check)
+      JSON.parse(planJson);
+    } catch (error) {
+      console.error("Failed to serialize download plan to JSON:", error);
+      console.error("Plan object:", {
+        id: plan.id,
+        masterPlaylistUri: plan.masterPlaylistUri,
+        hasVideo: !!plan.video,
+        videoSegments: plan.video?.segments?.length ?? 0,
+        hasAudio: !!plan.audio,
+        audioSegments: plan.audio?.segments?.length ?? 0,
+        hasSubtitles: !!plan.subtitles,
+        subtitleSegments: plan.subtitles?.segments?.length ?? 0,
+        exportTreeUri: plan.exportTreeUri,
+      });
+      throw new Error(`Failed to serialize download plan: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    const status = await this.nativeModule.startPlannedJob(planJson);
     return {
       id: status.id,
       state: status.state,

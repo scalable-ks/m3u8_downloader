@@ -48,14 +48,25 @@ class HlsDownloaderModule(
     @ReactMethod
     fun startPlannedJob(planJson: String, promise: Promise) {
         try {
-            val parsed = HlsPlanParser.parse(reactContext, planJson)
+            Log.d("HlsDownloaderModule", "Received plan JSON, size: ${planJson.length} bytes")
+
+            val parsed = try {
+                HlsPlanParser.parse(reactContext, planJson)
+            } catch (e: org.json.JSONException) {
+                Log.e("HlsDownloaderModule", "JSON parsing failed", e)
+                throw Exception("Failed to parse download plan JSON: ${e.message}")
+            }
+
             val jobId = parsed.request.id
+            Log.d("HlsDownloaderModule", "Plan parsed successfully for job: $jobId")
+
             val queued = buildQueuedState(parsed)
             stateStore.save(queued)
             enqueueWork(jobId, planJson, parsed.request.constraints)
             startPolling(jobId)
             promise.resolve(buildStatus(jobId, JobState.QUEUED))
         } catch (e: Exception) {
+            Log.e("HlsDownloaderModule", "Failed to start planned job", e)
             promise.reject("START_FAILED", e.message, e)
         }
     }
