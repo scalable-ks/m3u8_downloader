@@ -34,21 +34,36 @@ export class NativeDownloaderBridge implements DownloaderBridge {
     this.nativeModule = module;
     this.emitter = new NativeEventEmitter(module as never);
     this.emitter.addListener("downloadProgress", (payload) => {
-      const data = typeof payload === "string" ? JSON.parse(payload) : payload;
-      onProgress({
-        id: data.id,
-        state: data.state,
-        progress: data.progress,
-      });
+      try {
+        const data = typeof payload === "string" ? JSON.parse(payload) : payload;
+        onProgress({
+          id: data.id,
+          state: data.state,
+          progress: data.progress,
+        });
+      } catch (error) {
+        console.error("Failed to parse downloadProgress event:", error, "payload:", payload);
+      }
     });
     this.emitter.addListener("downloadError", (payload) => {
-      const data = typeof payload === "string" ? JSON.parse(payload) : payload;
-      onError({
-        id: data.id,
-        code: data.code,
-        message: data.message,
-        detail: data.detail,
-      });
+      try {
+        const data = typeof payload === "string" ? JSON.parse(payload) : payload;
+        onError({
+          id: data.id,
+          code: data.code,
+          message: data.message,
+          detail: data.detail,
+        });
+      } catch (error) {
+        console.error("Failed to parse downloadError event:", error, "payload:", payload);
+        // Still try to report a generic error
+        onError({
+          id: "unknown",
+          code: "json_parse_error",
+          message: "Failed to parse error event from native module",
+          detail: String(error),
+        });
+      }
     });
   }
 
