@@ -62,6 +62,9 @@ jobs:
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
       - name: Run lint, audits, and unit tests
         run: task pipe
+      - name: Clean Gradle build cache
+        working-directory: RnAndroidHlsApp/android
+        run: ./gradlew clean
       - name: Build release APK
         working-directory: RnAndroidHlsApp/android
         run: ./gradlew assembleRelease
