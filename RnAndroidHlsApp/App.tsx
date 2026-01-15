@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar, StyleSheet } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { DownloadScreen } from "./src/ui/DownloadScreen.tsx";
 import { DownloadManager } from "./src/bridge/downloadManager.ts";
 import { pickDirectory } from "./src/bridge/saf.ts";
@@ -9,6 +10,8 @@ import { NativeDownloaderBridge } from "./src/bridge/nativeBridge.ts";
 import { NativeJobStore } from "./src/bridge/nativeJobStore.ts";
 import { parseCookiesInput, parseHeadersInput } from "./src/ui/auth.ts";
 import { validatePlaylistUrl } from "./src/ui/validation.ts";
+
+const SELECTED_FOLDER_KEY = "@HlsDownloader:selectedFolder";
 
 function App(): JSX.Element {
   const [logs, setLogs] = useState<string[]>([]);
@@ -39,6 +42,21 @@ function App(): JSX.Element {
     const managerInstance = new DownloadManager(bridge, store, logger);
     managerRef.current = managerInstance;
     setManager(managerInstance);
+  }, [logger]);
+
+  useEffect(() => {
+    const loadSavedFolder = async () => {
+      try {
+        const savedFolder = await AsyncStorage.getItem(SELECTED_FOLDER_KEY);
+        if (savedFolder) {
+          setSelectedFolder(savedFolder);
+          logger.info("Loaded saved folder", { folder: savedFolder });
+        }
+      } catch (error) {
+        logger.error("Failed to load saved folder", { error });
+      }
+    };
+    loadSavedFolder();
   }, [logger]);
 
   const handleStart = async (playlistUri: string, headersInput: string, cookiesInput: string) => {
@@ -108,6 +126,12 @@ function App(): JSX.Element {
     if (uri) {
       logger.info("folder selected", { uri });
       setSelectedFolder(uri);
+      try {
+        await AsyncStorage.setItem(SELECTED_FOLDER_KEY, uri);
+        logger.info("Saved folder to storage", { uri });
+      } catch (error) {
+        logger.error("Failed to save folder to storage", { error });
+      }
     }
   };
 
