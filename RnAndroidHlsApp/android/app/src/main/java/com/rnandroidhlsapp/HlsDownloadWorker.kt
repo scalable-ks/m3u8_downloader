@@ -37,11 +37,19 @@ class HlsDownloadWorker(
     params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
     private val stateStore: DownloadStateStore = FileDownloadStateStore(appContext)
+    private val planStore = PlanFileStore(appContext)
 
     override suspend fun doWork(): Result {
-        val planJson = inputData.getString(KEY_PLAN_JSON) ?: return Result.failure()
+        val jobId = inputData.getString(KEY_JOB_ID) ?: return Result.failure()
+
+        // Load plan from file (avoids WorkManager's 10KB input data limit)
+        val planJson = planStore.load(jobId)
+        if (planJson == null) {
+            Log.e("HlsDownloadWorker", "Failed to load plan for job $jobId")
+            return Result.failure()
+        }
+
         val parsed = HlsPlanParser.parse(applicationContext, planJson)
-        val jobId = parsed.request.id
         setForeground(createForegroundInfo(jobId, 0, null))
 
         val progressListener =
@@ -94,7 +102,7 @@ class HlsDownloadWorker(
         // Await completion directly - no polling!
         val downloadResult = downloader.start(parsed.request, parsed.segments)
 
-        return when (downloadResult) {
+        val result = when (downloadResult) {
             is com.rnandroidhlsapp.downloader.DownloadResult.Success -> {
                 if (assembleAndExport(parsed)) {
                     Result.success()
@@ -105,6 +113,11 @@ class HlsDownloadWorker(
             is com.rnandroidhlsapp.downloader.DownloadResult.Failure -> Result.failure()
             is com.rnandroidhlsapp.downloader.DownloadResult.Cancelled -> Result.failure()
         }
+
+        // Clean up plan file after job completes (success or failure)
+        planStore.delete(jobId)
+
+        return result
     }
 
     private suspend fun assembleAndExport(parsed: ParsedPlan): Boolean {
@@ -299,7 +312,7 @@ class HlsDownloadWorker(
     }
 
     companion object {
-        const val KEY_PLAN_JSON = "plan_json"
+        const val KEY_JOB_ID = "job_id"
         const val CHANNEL_ID = "download_channel"
         const val NOTIFICATION_ID_BASE = 1000
     }

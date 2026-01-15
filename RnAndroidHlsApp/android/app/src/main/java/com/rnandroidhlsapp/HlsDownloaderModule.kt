@@ -33,9 +33,15 @@ class HlsDownloaderModule(
     private val reactContext: ReactApplicationContext,
 ) : ReactContextBaseJavaModule(reactContext) {
     private val stateStore: DownloadStateStore = FileDownloadStateStore(reactContext)
+    private val planStore = PlanFileStore(reactContext)
     private val workManager = WorkManager.getInstance(reactContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pollers = ConcurrentHashMap<String, Job>()
+
+    init {
+        // Clean up any old plan files that may have been left behind
+        planStore.cleanupOldPlans()
+    }
 
     override fun getName(): String = "HlsDownloaderModule"
 
@@ -158,11 +164,17 @@ class HlsDownloaderModule(
         planJson: String,
         constraints: com.rnandroidhlsapp.downloader.JobConstraints,
     ) {
+        // Save plan to file to avoid WorkManager's 10KB input data limit
+        if (!planStore.save(jobId, planJson)) {
+            android.util.Log.e("HlsDownloaderModule", "Failed to save plan for job $jobId")
+            throw Exception("Failed to save download plan")
+        }
+
         val request =
             OneTimeWorkRequestBuilder<HlsDownloadWorker>()
                 .setInputData(
                     Data.Builder()
-                        .putString(HlsDownloadWorker.KEY_PLAN_JSON, planJson)
+                        .putString(HlsDownloadWorker.KEY_JOB_ID, jobId)
                         .build(),
                 )
                 .setConstraints(buildConstraints(constraints))
