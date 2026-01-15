@@ -16,6 +16,7 @@ const SELECTED_FOLDER_KEY = "@HlsDownloader:selectedFolder";
 function App(): JSX.Element {
   const [logs, setLogs] = useState<string[]>([]);
   const [manager, setManager] = useState<DownloadManager | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
   const managerRef = useRef<DownloadManager | null>(null);
   const logger = useMemo<Logger>(
     () => ({
@@ -102,6 +103,7 @@ function App(): JSX.Element {
       return;
     }
     logger.info("start job", { playlistUri, exportTreeUri: selectedFolder });
+    setIsStarting(true);
     try {
       await manager.startPlanned({
         id: `job-${Date.now()}`,
@@ -117,6 +119,8 @@ function App(): JSX.Element {
         code: "start_failed",
         message: error instanceof Error ? error.message : "Failed to start download",
       });
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -146,6 +150,7 @@ function App(): JSX.Element {
             onPickFolder={handlePickFolder}
             selectedFolder={selectedFolder}
             logs={logs}
+            isStarting={isStarting}
           />
         ) : null}
       </SafeAreaView>

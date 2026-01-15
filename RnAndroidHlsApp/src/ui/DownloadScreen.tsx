@@ -11,6 +11,7 @@ interface DownloadScreenProps {
   selectedFolder?: string | null;
   defaultUri?: string;
   logs: string[];
+  isStarting?: boolean;
 }
 
 function formatProgress(job: DownloadJob): string {
@@ -40,6 +41,8 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
   const hasActiveDownload = useMemo(() => {
     return jobs.some((job) => job.state === "queued" || job.state === "running");
   }, [jobs]);
+
+  const isButtonDisabled = props.isStarting || hasActiveDownload;
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -93,21 +96,21 @@ export function DownloadScreen(props: DownloadScreenProps): JSX.Element {
           <Pressable
             style={({ pressed }) => [
               styles.startButton,
-              pressed && !hasActiveDownload ? styles.startButtonPressed : null,
-              hasActiveDownload ? styles.startButtonDisabled : null,
+              pressed && !isButtonDisabled ? styles.startButtonPressed : null,
+              isButtonDisabled ? styles.startButtonDisabled : null,
             ]}
-            onPress={() => !hasActiveDownload && props.onStart(playlistUri.trim(), "", "")}
-            disabled={hasActiveDownload}
+            onPress={() => !isButtonDisabled && props.onStart(playlistUri.trim(), "", "")}
+            disabled={isButtonDisabled}
           >
             {({ pressed }) => (
               <Text
                 style={[
                   styles.startButtonText,
-                  pressed && !hasActiveDownload ? styles.startButtonTextPressed : null,
-                  hasActiveDownload ? styles.startButtonTextDisabled : null,
+                  pressed && !isButtonDisabled ? styles.startButtonTextPressed : null,
+                  isButtonDisabled ? styles.startButtonTextDisabled : null,
                 ]}
               >
-                {hasActiveDownload ? "DOWNLOAD IN PROGRESS..." : "START DOWNLOAD"}
+                {props.isStarting ? "STARTING..." : hasActiveDownload ? "DOWNLOAD IN PROGRESS..." : "START DOWNLOAD"}
               </Text>
             )}
           </Pressable>
