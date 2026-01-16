@@ -74,3 +74,6 @@ ios/Pods/
 # Env
 .env
 .env.*
+
+# Claude Code skills (contains credentials)
+.claude/

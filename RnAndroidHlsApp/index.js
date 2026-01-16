@@ -9,7 +9,7 @@ import { name as appName } from './app.json';
 
 // Initialize Sentry BEFORE registering the app component
 Sentry.init({
-  dsn: process.env.SENTRY_DSN || '__SENTRY_DSN_PLACEHOLDER__',
+  dsn: 'https://6cd2a148004f57764226c7fb5a12b4af@o4510716831399936.ingest.de.sentry.io/4510716835070032',
 
   // Performance Monitoring
   tracesSampleRate: __DEV__ ? 1.0 : 0.1, // 100% in dev, 10% in production

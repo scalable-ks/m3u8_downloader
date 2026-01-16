@@ -30,7 +30,7 @@ class MainApplication : Application(), ReactApplication {
 
     // Initialize Sentry BEFORE React Native loads
     SentryAndroid.init(this) { options ->
-      options.dsn = BuildConfig.SENTRY_DSN ?: ""
+      options.dsn = "https://6cd2a148004f57764226c7fb5a12b4af@o4510716831399936.ingest.de.sentry.io/4510716835070032"
 
       // Enable NDK crash reporting
       options.isEnableNdk = true
