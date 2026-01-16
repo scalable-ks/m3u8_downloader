@@ -62,11 +62,26 @@ jobs:
           echo "$HOME/go/bin" >> "$GITHUB_PATH"
       - name: Run lint, audits, and unit tests
         run: task pipe
+      - name: Configure Sentry
+        working-directory: RnAndroidHlsApp
+        env:
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          echo "defaults.org=$SENTRY_ORG" > android/sentry.properties
+          echo "defaults.project=$SENTRY_PROJECT" >> android/sentry.properties
+          echo "auth.token=$SENTRY_AUTH_TOKEN" >> android/sentry.properties
       - name: Clean Gradle build cache
         working-directory: RnAndroidHlsApp/android
         run: ./gradlew clean
       - name: Build release APK
         working-directory: RnAndroidHlsApp/android
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: ./gradlew assembleRelease
       - name: Upload APK
         uses: actions/upload-artifact@v4

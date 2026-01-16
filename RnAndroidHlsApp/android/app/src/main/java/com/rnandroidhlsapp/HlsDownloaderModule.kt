@@ -5,6 +5,8 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import android.util.Log
+import io.sentry.Sentry
+import io.sentry.SentryLevel
 import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
@@ -55,6 +57,17 @@ class HlsDownloaderModule(
                 HlsPlanParser.parse(reactContext, planJson)
             } catch (e: org.json.JSONException) {
                 Log.e("HlsDownloaderModule", "JSON parsing failed", e)
+
+                // Send to Sentry with context
+                Sentry.withScope { scope ->
+                    scope.setTag("error_type", "json_parse")
+                    scope.setContexts("plan", mapOf(
+                        "size_bytes" to planJson.length,
+                        "preview" to planJson.take(200)
+                    ))
+                    Sentry.captureException(e)
+                }
+
                 throw Exception("Failed to parse download plan JSON: ${e.message}")
             }
 
@@ -68,6 +81,14 @@ class HlsDownloaderModule(
             promise.resolve(buildStatus(jobId, JobState.QUEUED))
         } catch (e: Exception) {
             Log.e("HlsDownloaderModule", "Failed to start planned job", e)
+
+            // Send to Sentry
+            Sentry.withScope { scope ->
+                scope.setTag("operation", "start_planned_job")
+                scope.setLevel(SentryLevel.ERROR)
+                Sentry.captureException(e)
+            }
+
             promise.reject("START_FAILED", e.message, e)
         }
     }

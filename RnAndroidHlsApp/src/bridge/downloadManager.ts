@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import type { DownloadJob } from "../domain/types.ts";
 import type { JobError, JobStatus, StartJobRequest, DownloaderBridge } from "./api.ts";
 import type { DownloadPlan } from "./models.ts";
@@ -98,6 +99,24 @@ export class DownloadManager {
   handleError(error: JobError): void {
     this.errorListeners.forEach((listener) => listener(error));
     void this.markFailed(error.id);
+
+    // Send to Sentry with structured context
+    Sentry.captureMessage(`Download error: ${error.message}`, {
+      level: 'error',
+      tags: {
+        error_code: error.code,
+        job_id: error.id,
+      },
+      contexts: {
+        download: {
+          id: error.id,
+          code: error.code,
+          message: error.message,
+          detail: error.detail,
+        },
+      },
+    });
+
     this.logger.error("job error", { id: error.id, code: error.code, message: error.message });
   }
 

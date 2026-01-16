@@ -18,6 +18,8 @@ import com.rnandroidhlsapp.downloader.JobProgress
 import com.rnandroidhlsapp.downloader.JobState
 import com.rnandroidhlsapp.downloader.ProgressListener
 import com.rnandroidhlsapp.downloader.RetryPolicy
+import io.sentry.Sentry
+import io.sentry.SentryLevel
 import com.rnandroidhlsapp.muxing.ConcatListWriter
 import com.rnandroidhlsapp.muxing.FfmpegKitRunner
 import com.rnandroidhlsapp.muxing.Mp4Assembler
@@ -86,6 +88,19 @@ class HlsDownloadWorker(
                             lastErrorDetail = detail,
                         ),
                     )
+
+                    // Send to Sentry
+                    Sentry.withScope { scope ->
+                        scope.setTag("error_code", code)
+                        scope.setTag("job_id", jobId)
+                        scope.setContexts("download_error", mapOf(
+                            "job_id" to jobId,
+                            "code" to code,
+                            "message" to message,
+                            "detail" to (detail ?: "")
+                        ))
+                        Sentry.captureMessage("Download job failed: $message", SentryLevel.ERROR)
+                    }
                 }
             }
 

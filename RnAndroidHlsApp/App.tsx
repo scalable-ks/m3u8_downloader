@@ -6,6 +6,8 @@ import { DownloadScreen } from "./src/ui/DownloadScreen.tsx";
 import { DownloadManager } from "./src/bridge/downloadManager.ts";
 import { pickDirectory } from "./src/bridge/saf.ts";
 import type { Logger } from "./src/bridge/logger.ts";
+import { SentryLogger } from "./src/bridge/sentryLogger.ts";
+import { CompositeLogger } from "./src/bridge/compositeLogger.ts";
 import { NativeDownloaderBridge } from "./src/bridge/nativeBridge.ts";
 import { NativeJobStore } from "./src/bridge/nativeJobStore.ts";
 import { parseCookiesInput, parseHeadersInput } from "./src/ui/auth.ts";
@@ -18,7 +20,9 @@ function App(): JSX.Element {
   const [manager, setManager] = useState<DownloadManager | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const managerRef = useRef<DownloadManager | null>(null);
-  const logger = useMemo<Logger>(
+
+  // Create UI logger for state updates
+  const uiLogger = useMemo<Logger>(
     () => ({
       info(message, context) {
         setLogs((current) => [`INFO ${message}`, ...current].slice(0, 16));
@@ -32,6 +36,13 @@ function App(): JSX.Element {
     }),
     [],
   );
+
+  // Combine UI logger with Sentry logger
+  const logger = useMemo<Logger>(
+    () => new CompositeLogger([uiLogger, new SentryLogger()]),
+    [uiLogger],
+  );
+
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
 
   useEffect(() => {

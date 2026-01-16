@@ -1,11 +1,14 @@
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+const { withSentryConfig } = require('@sentry/react-native/metro');
 
 /**
- * Metro configuration
+ * Metro configuration with Sentry plugin for automatic Debug ID generation
  * https://reactnative.dev/docs/metro
  *
  * @type {import('@react-native/metro-config').MetroConfig}
  */
 const config = {};
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+module.exports = withSentryConfig(
+  mergeConfig(getDefaultConfig(__dirname), config)
+);

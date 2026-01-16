@@ -1,6 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+apply plugin: "io.sentry.android.gradle"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -84,6 +85,10 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        buildConfigField "String", "SENTRY_DSN", "\"${System.getenv("SENTRY_DSN") ?: ""}\""
+    }
+    buildFeatures {
+        buildConfig = true
     }
     signingConfigs {
         debug {
@@ -112,6 +117,31 @@ android {
     }
 }
 
+sentry {
+    // Enables or disables the automatic upload of native debug symbols
+    uploadNativeSymbols = true
+
+    // Includes native source code in debug symbols
+    includeNativeSources = true
+
+    // Includes ProGuard mapping file (if enabled)
+    includeProguardMapping = true
+
+    // Automatically tag releases
+    autoUploadProguardMapping = true
+
+    // Disable in debug builds to speed up development
+    autoUploadNativeSymbols = !gradle.startParameter.taskNames.any { it.contains("Debug") }
+
+    // Enable source context (source code snippets in Sentry)
+    includeSourceContext = true
+
+    // Trace instrumentation for performance monitoring
+    tracingInstrumentation {
+        enabled = true
+    }
+}
+
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
@@ -125,6 +155,9 @@ dependencies {
 
     implementation(files("libs/ffmpeg-kit-full.aar"))
     implementation("com.arthenica:smart-exception-java:0.2.1")
+
+    // Sentry Android SDK with NDK support
+    implementation("io.sentry:sentry-android:7.1.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

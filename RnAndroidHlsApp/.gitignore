@@ -73,3 +73,9 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Sentry
+android/sentry.properties
+sentry.properties
+.env
+.env.local
