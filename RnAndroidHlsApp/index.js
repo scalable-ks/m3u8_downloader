@@ -15,14 +15,15 @@ Sentry.init({
   tracesSampleRate: __DEV__ ? 1.0 : 0.1, // 100% in dev, 10% in production
   profilesSampleRate: 1.0, // Profile 100% of traced transactions
 
-  // Session Replay
-  _experiments: {
-    replaysSessionSampleRate: 0.1, // 10% of sessions
-    replaysOnErrorSampleRate: 1.0, // 100% of errors
-  },
-  integrations: [
-    Sentry.mobileReplayIntegration(),
-  ],
+  // Session Replay - DISABLED due to Android crash bug in 7.8.0
+  // See: https://github.com/getsentry/sentry-react-native/issues/3990
+  // _experiments: {
+  //   replaysSessionSampleRate: 0.1,
+  //   replaysOnErrorSampleRate: 1.0,
+  // },
+  // integrations: [
+  //   Sentry.mobileReplayIntegration(),
+  // ],
 
   // Environment and Release Tracking
   environment: __DEV__ ? 'development' : 'production',
