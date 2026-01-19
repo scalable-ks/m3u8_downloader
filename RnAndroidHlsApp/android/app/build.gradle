@@ -118,6 +118,11 @@ android {
 }
 
 sentry {
+    // Force specific Sentry version to prevent mixed version crashes
+    autoInstallation {
+        sentryVersion = "8.29.0"
+    }
+
     // Enables or disables the automatic upload of native debug symbols
     uploadNativeSymbols = true
 
