@@ -5,6 +5,8 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
+import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.ReadableType
 import android.util.Log
 import io.sentry.Sentry
@@ -54,14 +56,12 @@ class HlsDownloaderModule(
     fun startPlannedJob(planData: Dynamic, promise: Promise) {
         try {
             // Handle both String and ReadableMap types from React Native bridge
-            val planJson = when {
-                planData.type == ReadableType.String -> planData.asString()
-                planData.type == ReadableType.Map -> {
+            val planJson: String = when (planData.type) {
+                ReadableType.String -> planData.asString()
+                ReadableType.Map -> {
                     // Convert ReadableMap to JSON string
                     val map = planData.asMap()
-                    com.facebook.react.bridge.Arguments.makeNativeMap(map).toHashMap().let {
-                        org.json.JSONObject(it as Map<*, *>).toString()
-                    }
+                    convertReadableMapToJson(map).toString()
                 }
                 else -> throw Exception("Invalid plan data type: ${planData.type}")
             }
@@ -205,6 +205,38 @@ class HlsDownloaderModule(
             .put("progress", computeProgress(state))
             .put("masterPlaylistUri", state.playlistUri)
             .put("createdAt", state.createdAt)
+    }
+
+    private fun convertReadableMapToJson(readableMap: com.facebook.react.bridge.ReadableMap): org.json.JSONObject {
+        val jsonObject = org.json.JSONObject()
+        val iterator = readableMap.keySetIterator()
+        while (iterator.hasNextKey()) {
+            val key = iterator.nextKey()
+            when (readableMap.getType(key)) {
+                ReadableType.Null -> jsonObject.put(key, org.json.JSONObject.NULL)
+                ReadableType.Boolean -> jsonObject.put(key, readableMap.getBoolean(key))
+                ReadableType.Number -> jsonObject.put(key, readableMap.getDouble(key))
+                ReadableType.String -> jsonObject.put(key, readableMap.getString(key))
+                ReadableType.Map -> jsonObject.put(key, convertReadableMapToJson(readableMap.getMap(key)!!))
+                ReadableType.Array -> jsonObject.put(key, convertReadableArrayToJson(readableMap.getArray(key)!!))
+            }
+        }
+        return jsonObject
+    }
+
+    private fun convertReadableArrayToJson(readableArray: com.facebook.react.bridge.ReadableArray): org.json.JSONArray {
+        val jsonArray = org.json.JSONArray()
+        for (i in 0 until readableArray.size()) {
+            when (readableArray.getType(i)) {
+                ReadableType.Null -> jsonArray.put(org.json.JSONObject.NULL)
+                ReadableType.Boolean -> jsonArray.put(readableArray.getBoolean(i))
+                ReadableType.Number -> jsonArray.put(readableArray.getDouble(i))
+                ReadableType.String -> jsonArray.put(readableArray.getString(i))
+                ReadableType.Map -> jsonArray.put(convertReadableMapToJson(readableArray.getMap(i)))
+                ReadableType.Array -> jsonArray.put(convertReadableArrayToJson(readableArray.getArray(i)))
+            }
+        }
+        return jsonArray
     }
 
     private fun enqueueWork(
