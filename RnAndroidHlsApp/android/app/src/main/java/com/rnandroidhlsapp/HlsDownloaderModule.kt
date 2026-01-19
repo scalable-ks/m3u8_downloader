@@ -57,10 +57,10 @@ class HlsDownloaderModule(
         try {
             // Handle both String and ReadableMap types from React Native bridge
             val planJson: String = when (planData.type) {
-                ReadableType.String -> planData.asString()
+                ReadableType.String -> planData.asString() ?: throw Exception("Plan data string is null")
                 ReadableType.Map -> {
                     // Convert ReadableMap to JSON string
-                    val map = planData.asMap()
+                    val map = planData.asMap() ?: throw Exception("Plan data map is null")
                     convertReadableMapToJson(map).toString()
                 }
                 else -> throw Exception("Invalid plan data type: ${planData.type}")
@@ -232,8 +232,8 @@ class HlsDownloaderModule(
                 ReadableType.Boolean -> jsonArray.put(readableArray.getBoolean(i))
                 ReadableType.Number -> jsonArray.put(readableArray.getDouble(i))
                 ReadableType.String -> jsonArray.put(readableArray.getString(i))
-                ReadableType.Map -> jsonArray.put(convertReadableMapToJson(readableArray.getMap(i)))
-                ReadableType.Array -> jsonArray.put(convertReadableArrayToJson(readableArray.getArray(i)))
+                ReadableType.Map -> jsonArray.put(convertReadableMapToJson(readableArray.getMap(i)!!))
+                ReadableType.Array -> jsonArray.put(convertReadableArrayToJson(readableArray.getArray(i)!!))
             }
         }
         return jsonArray
