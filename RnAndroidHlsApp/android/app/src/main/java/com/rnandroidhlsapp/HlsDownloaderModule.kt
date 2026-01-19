@@ -1,9 +1,11 @@
 package com.rnandroidhlsapp
 
+import com.facebook.react.bridge.Dynamic
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableType
 import android.util.Log
 import io.sentry.Sentry
 import io.sentry.SentryLevel
@@ -49,8 +51,21 @@ class HlsDownloaderModule(
     override fun getName(): String = "HlsDownloaderModule"
 
     @ReactMethod
-    fun startPlannedJob(planJson: String, promise: Promise) {
+    fun startPlannedJob(planData: Dynamic, promise: Promise) {
         try {
+            // Handle both String and ReadableMap types from React Native bridge
+            val planJson = when {
+                planData.type == ReadableType.String -> planData.asString()
+                planData.type == ReadableType.Map -> {
+                    // Convert ReadableMap to JSON string
+                    val map = planData.asMap()
+                    com.facebook.react.bridge.Arguments.makeNativeMap(map).toHashMap().let {
+                        org.json.JSONObject(it as Map<*, *>).toString()
+                    }
+                }
+                else -> throw Exception("Invalid plan data type: ${planData.type}")
+            }
+
             Log.d("HlsDownloaderModule", "Received plan JSON, size: ${planJson.length} bytes")
 
             val parsed = try {
