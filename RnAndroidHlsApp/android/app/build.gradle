@@ -168,3 +168,13 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
+
+// Force ALL Sentry dependencies to use the same version to prevent NoSuchMethodError
+configurations.all {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        if (details.requested.group == 'io.sentry') {
+            details.useVersion '8.29.0'
+            details.because 'Force consistent Sentry version across all modules'
+        }
+    }
+}
