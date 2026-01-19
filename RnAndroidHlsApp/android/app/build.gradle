@@ -156,18 +156,8 @@ dependencies {
     implementation(files("libs/ffmpeg-kit-full.aar"))
     implementation("com.arthenica:smart-exception-java:0.2.1")
 
-    // Sentry Android SDK - force 8.30.0 to match @sentry/react-native@7.9.0 transitive dependency
-    implementation("io.sentry:sentry-android:8.30.0") {
-        force = true
-    }
-    configurations.all {
-        resolutionStrategy.force(
-            "io.sentry:sentry-android:8.30.0",
-            "io.sentry:sentry-android-core:8.30.0",
-            "io.sentry:sentry-android-ndk:8.30.0",
-            "io.sentry:sentry-android-okhttp:8.30.0"
-        )
-    }
+    // Sentry Android SDK - will be overridden to 8.30.0 by resolutionStrategy below
+    implementation("io.sentry:sentry-android:8.30.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
@@ -177,4 +167,14 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+}
+
+// Force all Sentry dependencies to 8.30.0 to match @sentry/react-native@7.9.0
+configurations.all {
+    resolutionStrategy {
+        force "io.sentry:sentry-android:8.30.0"
+        force "io.sentry:sentry-android-core:8.30.0"
+        force "io.sentry:sentry-android-ndk:8.30.0"
+        force "io.sentry:sentry-android-okhttp:8.30.0"
+    }
 }
