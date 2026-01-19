@@ -169,12 +169,10 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
 
-// Force all Sentry dependencies to 8.30.0 to match @sentry/react-native@7.9.0
+// Force main Sentry dependency to 8.30.0 to match @sentry/react-native@7.9.0
+// Transitive dependencies will be resolved automatically
 configurations.all {
     resolutionStrategy {
         force "io.sentry:sentry-android:8.30.0"
-        force "io.sentry:sentry-android-core:8.30.0"
-        force "io.sentry:sentry-android-ndk:8.30.0"
-        force "io.sentry:sentry-android-okhttp:8.30.0"
     }
 }
