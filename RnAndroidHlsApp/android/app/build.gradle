@@ -118,9 +118,10 @@ android {
 }
 
 sentry {
-    // Force specific Sentry version to prevent mixed version crashes
+    // Disable auto-installation - let @sentry/react-native manage Sentry SDK version
+    // The npm package already declares 'api io.sentry:sentry-android:8.29.0' in its build.gradle
     autoInstallation {
-        sentryVersion = "8.29.0"
+        enabled = false
     }
 
     // Enables or disables the automatic upload of native debug symbols
