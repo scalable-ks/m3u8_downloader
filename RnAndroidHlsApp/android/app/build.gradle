@@ -157,7 +157,8 @@ dependencies {
     implementation("com.arthenica:smart-exception-java:0.2.1")
 
     // Sentry BOM - ensures all Sentry dependencies use compatible versions
-    implementation(platform("io.sentry:sentry-bom:8.30.0"))
+    // Using 8.29.0 to match @sentry/react-native@7.8.0
+    implementation(platform("io.sentry:sentry-bom:8.29.0"))
     implementation("io.sentry:sentry-android") // Version managed by BOM
 
     if (hermesEnabled.toBoolean()) {
