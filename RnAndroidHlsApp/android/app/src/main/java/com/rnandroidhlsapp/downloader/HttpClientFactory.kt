@@ -1,5 +1,6 @@
 package com.rnandroidhlsapp.downloader
 
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -39,6 +40,25 @@ object HttpClientFactory {
     }
 
     /**
+     * Interceptor that adds browser-like headers to all requests.
+     * Many HLS servers require User-Agent and Referer headers to prevent scraping.
+     */
+    private val headerInterceptor = Interceptor { chain ->
+        val original = chain.request()
+        val url = original.url.toString()
+
+        // Extract domain for Referer header
+        val referer = original.url.scheme + "://" + original.url.host + "/"
+
+        val request = original.newBuilder()
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+            .header("Referer", referer)
+            .build()
+
+        chain.proceed(request)
+    }
+
+    /**
      * Creates a new OkHttpClient with appropriate configuration for HLS streaming.
      * Should only be called once to create the shared instance.
      */
@@ -47,6 +67,7 @@ object HttpClientFactory {
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(10, TimeUnit.SECONDS)
+            .addInterceptor(headerInterceptor)
             // Connection pool is configured automatically with reasonable defaults:
             // - 5 idle connections kept alive
             // - 5 minute keep-alive duration
