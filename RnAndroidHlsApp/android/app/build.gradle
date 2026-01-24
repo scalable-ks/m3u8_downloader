@@ -118,10 +118,9 @@ android {
 }
 
 sentry {
-    // Disable auto-installation - let @sentry/react-native manage Sentry SDK version
-    // The npm package already declares 'api io.sentry:sentry-android:8.29.0' in its build.gradle
+    // Enable auto-installation to work with React Native autolinking
     autoInstallation {
-        enabled = false
+        enabled = true
     }
 
     // Enables or disables the automatic upload of native debug symbols
@@ -159,7 +158,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okio:okio:3.9.0")
 
-    implementation(files("libs/ffmpeg-kit-full.aar"))
+    // FFmpeg Kit - using community-maintained Maven dependency instead of local AAR
+    // Original FFmpegKit retired Jan 2025, using 16KB page size compatible fork
+    implementation("com.moizhassan.ffmpeg:ffmpeg-kit-16kb:6.1.1")
     implementation("com.arthenica:smart-exception-java:0.2.1")
 
     // Sentry Android - version controlled by @sentry/react-native package
@@ -173,4 +174,6 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    // JVM implementation of org.json for unit tests (Android JSONObject not available in JVM tests)
+    testImplementation("org.json:json:20231013")
 }

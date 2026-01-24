@@ -1,5 +1,6 @@
 package com.rnandroidhlsapp.downloader
 
+import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -32,7 +33,9 @@ class SegmentDownloaderTest {
             )
 
         // ACT
-        downloader.downloadSegment(segment, file, emptyMap(), 2)
+        runBlocking {
+            downloader.downloadSegment(segment, file, emptyMap(), 2)
+        }
 
         // ASSERT
         val request = server.takeRequest()

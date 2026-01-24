@@ -49,7 +49,7 @@ private class InMemoryStateStore : DownloadStateStore {
 private class RecordingSegmentDownloader : SegmentDownloader(OkHttpClient()) {
     val calls = CopyOnWriteArrayList<String>()
 
-    override fun downloadSegment(
+    override suspend fun downloadSegment(
         segment: Segment,
         destination: File,
         headers: Map<String, String>,
