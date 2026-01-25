@@ -15,5 +15,8 @@
     "@typescript-eslint/parser": "^8.52.0",
     "eslint": "^9.39.2",
     "globals": "^17.0.0"
+  },
+  "dependencies": {
+    "@sentry/react-native": "7.10.0"
   }
 }
