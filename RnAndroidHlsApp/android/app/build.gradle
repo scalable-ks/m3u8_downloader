@@ -74,7 +74,7 @@ def enableProguardInReleaseBuilds = false
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
-    ndkVersion rootProject.ext.ndkVersion
+    // ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
@@ -111,8 +111,14 @@ android {
         }
     }
     testOptions {
-        unitTests.all {
-            useJUnitPlatform()
+        unitTests {
+            all {
+                useJUnitPlatform()
+            }
+            // Return default values for Android framework methods in JVM unit tests
+            // This allows tests to run without real Android classes (Log, Build, etc.)
+            // Fixes: https://developer.android.com/training/testing/local-tests#error-not-mocked
+            returnDefaultValues = true
         }
     }
 }
@@ -176,4 +182,20 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     // JVM implementation of org.json for unit tests (Android JSONObject not available in JVM tests)
     testImplementation("org.json:json:20231013")
+
+    // Mockito for mocking
+    testImplementation("org.mockito:mockito-core:5.11.0")
+    testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+
+    // Kotlin test libraries (using JUnit 5)
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5:1.9.23")
+
+    // Coroutines test
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+
+    // WorkManager testing
+    testImplementation("androidx.work:work-testing:2.9.0")
+
+    // Guava for Futures (required by WorkManager mocks)
+    testImplementation("com.google.guava:guava:33.0.0-android")
 }
