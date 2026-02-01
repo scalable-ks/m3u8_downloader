@@ -1,0 +1,17 @@
+# Build outputs
+android/
+ios/
+node_modules/
+.bundle/
+
+# Config files (CommonJS, not linted)
+.eslintrc.js
+.prettierrc.js
+babel.config.js
+jest.config.js
+jest.setup.js
+metro.config.js
+
+# Generated files
+coverage/
+*.log
